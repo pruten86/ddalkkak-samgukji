@@ -24,30 +24,49 @@ export interface NewHallOfFameRecord {
 const LOCAL_STORAGE_KEY = 'ttalkkak_samgukji_hall_of_fame_v1';
 const MAX_HALL_OF_FAME_ROWS = 50;
 
-function normalizeSupabaseUrl(raw: string | undefined): string {
-  const trimmed = raw?.trim() || '';
+export function normalizeSupabaseUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim().replace(/^['"]+|['"]+$/g, '').trim();
   if (!trimmed) return '';
   try {
-    return new URL(trimmed).origin;
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return '';
+    }
+    if (!parsed.hostname) {
+      return '';
+    }
+    return parsed.origin;
   } catch {
-    return trimmed.replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+    return '';
   }
 }
 
-const supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
-const supabaseAnonKey =
-  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
+function createSafeSupabaseClient(): SupabaseClient | null {
+  try {
+    const env = (import.meta as { env?: Record<string, unknown> }).env;
+    const supabaseUrl = normalizeSupabaseUrl(env?.VITE_SUPABASE_URL);
+    const rawKey = env?.VITE_SUPABASE_ANON_KEY;
+    const supabaseAnonKey =
+      typeof rawKey === 'string' ? rawKey.trim().replace(/^['"]+|['"]+$/g, '').trim() : '';
 
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-    supabaseAnonKey &&
-    !supabaseUrl.includes('your-project.supabase.co') &&
-    supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY'
-);
+    if (
+      !supabaseUrl ||
+      !supabaseAnonKey ||
+      supabaseUrl.includes('your-project.supabase.co') ||
+      supabaseAnonKey === 'YOUR_SUPABASE_ANON_KEY'
+    ) {
+      return null;
+    }
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+    return createClient(supabaseUrl, supabaseAnonKey);
+  } catch {
+    return null;
+  }
+}
+
+export const supabase: SupabaseClient | null = createSafeSupabaseClient();
+export const isSupabaseConfigured = Boolean(supabase);
 
 export function sortHallOfFameEntries(entries: HallOfFameEntry[]): HallOfFameEntry[] {
   return [...entries]
@@ -161,33 +180,37 @@ export async function submitHallOfFameEntry(
   };
 
   if (supabase) {
-    const { data, error } = await supabase
-      .from('hall_of_fame')
-      .insert([sanitized])
-      .select('*')
-      .single();
-
-    if (!error && data) {
-      return {
-        entry: normalizeRow(data as Record<string, unknown>),
-        source: 'supabase',
-      };
-    }
-
-    // Retry with `grade` column if the remote schema uses `grade` instead of reserved word `rank`
-    if (error && /rank|column/i.test(error.message)) {
-      const { rank, ...rest } = sanitized;
-      const retry = await supabase
+    try {
+      const { data, error } = await supabase
         .from('hall_of_fame')
-        .insert([{ ...rest, grade: rank }])
+        .insert([sanitized])
         .select('*')
         .single();
-      if (!retry.error && retry.data) {
+
+      if (!error && data) {
         return {
-          entry: normalizeRow(retry.data as Record<string, unknown>),
+          entry: normalizeRow(data as Record<string, unknown>),
           source: 'supabase',
         };
       }
+
+      // Retry with `grade` column if the remote schema uses `grade` instead of reserved word `rank`
+      if (error && /rank|column/i.test(error.message)) {
+        const { rank, ...rest } = sanitized;
+        const retry = await supabase
+          .from('hall_of_fame')
+          .insert([{ ...rest, grade: rank }])
+          .select('*')
+          .single();
+        if (!retry.error && retry.data) {
+          return {
+            entry: normalizeRow(retry.data as Record<string, unknown>),
+            source: 'supabase',
+          };
+        }
+      }
+    } catch {
+      // Fall back to localStorage preview mode below
     }
   }
 
@@ -212,24 +235,32 @@ export function subscribeHallOfFameInserts(
     return () => {};
   }
 
-  const channel = supabase
-    .channel(`hall_of_fame_inserts_${Date.now()}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'hall_of_fame',
-      },
-      (payload) => {
-        if (payload.new) {
-          onInsert(normalizeRow(payload.new as Record<string, unknown>));
+  try {
+    const channel = supabase
+      .channel(`hall_of_fame_inserts_${Date.now()}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'hall_of_fame',
+        },
+        (payload) => {
+          if (payload.new) {
+            onInsert(normalizeRow(payload.new as Record<string, unknown>));
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
 
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+    return () => {
+      try {
+        void supabase.removeChannel(channel);
+      } catch {
+        // Ignore cleanup errors
+      }
+    };
+  } catch {
+    return () => {};
+  }
 }
