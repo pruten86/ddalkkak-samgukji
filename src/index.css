@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif-kr: 'Noto Serif KR', 'Batang', Georgia, serif;
+    --font-sans-kr: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans-kr);
+    background-color: #efe5d1;
+    color: #231f1a;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-serif-kr);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle hanji parchment grain surface */
+.hanji-surface {
+  background-color: #f4ebd8;
+  background-image:
+    radial-gradient(circle at 20% 25%, rgba(168, 138, 92, 0.08) 0%, transparent 52%),
+    radial-gradient(circle at 82% 78%, rgba(142, 112, 72, 0.09) 0%, transparent 48%),
+    linear-gradient(180deg, rgba(255, 250, 240, 0.45) 0%, rgba(226, 211, 182, 0.35) 100%);
+}
+
+@keyframes marchDash {
+  from {
+    stroke-dashoffset: 28;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes floatUpFade {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.04);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(-18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.95);
+  }
+}
+
+@keyframes flameBurst {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  65% {
+    opacity: 0.92;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
+@keyframes ringPulse {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+
+@keyframes mapShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-3px, 2px); }
+  40% { transform: translate(3px, -2px); }
+  60% { transform: translate(-2px, -1px); }
+  80% { transform: translate(2px, 1px); }
+}
+
+@keyframes splashPulse {
+  0%, 100% {
+    opacity: 0.72;
+    transform: translateY(0px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.animate-march-dash {
+  animation: marchDash 0.48s linear infinite;
+}
+
+.animate-float-up {
+  animation: floatUpFade 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-flame-burst {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: flameBurst 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-ring-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ringPulse 1.3s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.animate-map-shake {
+  animation: mapShake 0.32s ease-in-out;
+}
+
+.animate-splash-pulse {
+  animation: splashPulse 2.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-march-dash,
+  .animate-float-up,
+  .animate-flame-burst,
+  .animate-ring-pulse,
+  .animate-map-shake,
+  .animate-splash-pulse {
+    animation: none !important;
+  }
+}

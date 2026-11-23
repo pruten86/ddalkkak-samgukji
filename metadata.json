@@ -1,0 +1,6 @@
+{
+  "name": "딸깍 삼국지 — 5분만에 천하통일",
+  "description": "동양 고지도 감성의 초간단 턴제 삼국지 전략 웹게임, 딸깍 삼국지 — 5분만에 천하통일.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
