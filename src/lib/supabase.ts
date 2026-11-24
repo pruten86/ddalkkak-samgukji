@@ -9,7 +9,7 @@ export interface HallOfFameEntry {
   turns: number;
   lubu_defeated: boolean;
   score: number;
-  created_at: string;
+  created_at?: string | null;
 }
 
 export interface NewHallOfFameRecord {
@@ -23,6 +23,60 @@ export interface NewHallOfFameRecord {
 
 const LOCAL_STORAGE_KEY = 'ttalkkak_samgukji_hall_of_fame_v1';
 const MAX_HALL_OF_FAME_ROWS = 50;
+
+/**
+ * Formats an ISO / UTC timestamp into Korea Standard Time (Asia/Seoul):
+ * `YYYY.MM.DD HH:mm` (24-hour clock, 2-digit zero padding).
+ * Safely returns `""` for null, empty, or invalid timestamps.
+ */
+export function formatHallOfFameDateTime(isoString?: string | null): string {
+  if (typeof isoString !== 'string') return '';
+  const trimmed = isoString.trim();
+  if (!trimmed) return '';
+
+  // Normalize PostgreSQL timestamps (e.g., "2026-11-24 14:22:00+00") for full ISO-8601 compatibility
+  let normalizedInput = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(trimmed)
+    ? trimmed.replace(' ', 'T')
+    : trimmed;
+  normalizedInput = normalizedInput.replace(/([+-]\d{2})$/, '$1:00');
+
+  const date = new Date(normalizedInput);
+  if (Number.isNaN(date.getTime())) return '';
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    const parts = formatter.formatToParts(date);
+    const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((p) => p.type === type)?.value ?? '';
+
+    const year = getPart('year');
+    const month = getPart('month').padStart(2, '0');
+    const day = getPart('day').padStart(2, '0');
+    const rawHour = getPart('hour').padStart(2, '0');
+    const hour = rawHour === '24' ? '00' : rawHour;
+    const minute = getPart('minute').padStart(2, '0');
+
+    if (!year || !month || !day || !hour || !minute) return '';
+    return `${year}.${month}.${day} ${hour}:${minute}`;
+  } catch {
+    // Fallback fixed UTC+9 calculation (Asia/Seoul has no DST)
+    const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    const year = kst.getUTCFullYear();
+    const month = String(kst.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(kst.getUTCDate()).padStart(2, '0');
+    const hour = String(kst.getUTCHours()).padStart(2, '0');
+    const minute = String(kst.getUTCMinutes()).padStart(2, '0');
+    return `${year}.${month}.${day} ${hour}:${minute}`;
+  }
+}
 
 export function normalizeSupabaseUrl(raw: unknown): string {
   if (typeof raw !== 'string') return '';
@@ -68,12 +122,18 @@ function createSafeSupabaseClient(): SupabaseClient | null {
 export const supabase: SupabaseClient | null = createSafeSupabaseClient();
 export const isSupabaseConfigured = Boolean(supabase);
 
+function getSortableTimestamp(iso?: string | null): number {
+  if (!iso) return Number.POSITIVE_INFINITY;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
+}
+
 export function sortHallOfFameEntries(entries: HallOfFameEntry[]): HallOfFameEntry[] {
   return [...entries]
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       if (a.turns !== b.turns) return a.turns - b.turns;
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return getSortableTimestamp(a.created_at) - getSortableTimestamp(b.created_at);
     })
     .slice(0, MAX_HALL_OF_FAME_ROWS);
 }
@@ -102,6 +162,11 @@ function writeLocalEntries(entries: HallOfFameEntry[]): void {
 
 export function normalizeHallOfFameRow(raw: Record<string, unknown>): HallOfFameEntry {
   const rankVal = (raw.rank_grade ?? raw.rank ?? raw.grade ?? 'C') as VictoryRank;
+  const createdAt =
+    typeof raw.created_at === 'string' && raw.created_at.trim().length > 0
+      ? raw.created_at.trim()
+      : null;
+
   return {
     id: String(raw.id ?? ''),
     nickname: String(raw.nickname ?? ''),
@@ -110,28 +175,38 @@ export function normalizeHallOfFameRow(raw: Record<string, unknown>): HallOfFame
     turns: Number(raw.turns ?? 0),
     lubu_defeated: Boolean(raw.lubu_defeated),
     score: Number(raw.score ?? 0),
-    created_at: String(raw.created_at ?? new Date().toISOString()),
+    created_at: createdAt,
   };
 }
+
+const HALL_OF_FAME_SELECT_WITH_RANK_GRADE =
+  'id, nickname, faction, rank_grade, turns, lubu_defeated, score, created_at';
 
 export async function fetchHallOfFame(
   factionFilter: 'all' | PlayableFactionId = 'all'
 ): Promise<{ entries: HallOfFameEntry[]; source: 'supabase' | 'local'; error?: string }> {
   if (supabase) {
     try {
-      let query = supabase
-        .from('hall_of_fame')
-        .select('*')
-        .order('score', { ascending: false })
-        .order('turns', { ascending: true })
-        .order('created_at', { ascending: true })
-        .limit(MAX_HALL_OF_FAME_ROWS);
+      const buildQuery = (columns: string) => {
+        let q = supabase
+          .from('hall_of_fame')
+          .select(columns)
+          .order('score', { ascending: false })
+          .order('turns', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(MAX_HALL_OF_FAME_ROWS);
+        if (factionFilter !== 'all') {
+          q = q.eq('faction', factionFilter);
+        }
+        return q;
+      };
 
-      if (factionFilter !== 'all') {
-        query = query.eq('faction', factionFilter);
+      let { data, error } = await buildQuery(HALL_OF_FAME_SELECT_WITH_RANK_GRADE);
+      if (error && /rank_grade|column/i.test(error.message)) {
+        // Fallback for schemas using `rank` or `grade` column names (still includes `created_at`)
+        ({ data, error } = await buildQuery('*'));
       }
 
-      const { data, error } = await query;
       if (error) {
         return {
           entries: filterAndSortLocal(factionFilter),
@@ -139,7 +214,9 @@ export async function fetchHallOfFame(
           error: error.message,
         };
       }
-      const normalized = ((data ?? []) as Record<string, unknown>[]).map(normalizeHallOfFameRow);
+      const normalized = ((data ?? []) as unknown as Record<string, unknown>[]).map(
+        normalizeHallOfFameRow
+      );
       return {
         entries: sortHallOfFameEntries(normalized),
         source: 'supabase',
@@ -182,22 +259,27 @@ export async function submitHallOfFameEntry(
   if (supabase) {
     try {
       const { rank, ...rest } = sanitized;
-      const payloads: Record<string, unknown>[] = [
-        { ...rest, rank_grade: rank },
-        { ...rest, rank },
-        { ...rest, grade: rank },
+      const attempts: Array<{ payload: Record<string, unknown>; rankCol: string }> = [
+        { payload: { ...rest, rank_grade: rank }, rankCol: 'rank_grade' },
+        { payload: { ...rest, rank }, rankCol: 'rank' },
+        { payload: { ...rest, grade: rank }, rankCol: 'grade' },
       ];
 
-      for (const payload of payloads) {
+      for (const { payload, rankCol } of attempts) {
+        const selectCols = `id, nickname, faction, ${rankCol}, turns, lubu_defeated, score, created_at`;
         const { data, error } = await supabase
           .from('hall_of_fame')
           .insert([payload])
-          .select('*')
+          .select(selectCols)
           .single();
 
         if (!error && data) {
+          const normalized = normalizeHallOfFameRow(data as unknown as Record<string, unknown>);
           return {
-            entry: normalizeHallOfFameRow(data as Record<string, unknown>),
+            entry: {
+              ...normalized,
+              created_at: normalized.created_at ?? new Date().toISOString(),
+            },
             source: 'supabase',
           };
         }

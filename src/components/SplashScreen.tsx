@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { sound } from '../game/sound';
 
 interface SplashScreenProps {
   onProceed: () => void;
@@ -26,6 +27,8 @@ export function SplashScreen({ onProceed }: SplashScreenProps) {
 
   const triggerProceed = () => {
     if (fading) return;
+    // Play signature '딸-깍' (+ subtle trailing drum) synchronously inside the user gesture
+    sound.playSplashStart();
     setFading(true);
     window.setTimeout(() => {
       onProceed();

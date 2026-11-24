@@ -140,6 +140,9 @@ export interface GameState {
   turn: number;
   ap: number;
   maxAp: number;
+  turnMaxAp: number;
+  nextTurnBonusAp: number;
+  victoryApBonusActive: boolean;
   fireUsedThisTurn: boolean;
   fireEnhancedThisTurn: boolean;
   cities: Record<CityId, CityState>;

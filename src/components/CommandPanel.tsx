@@ -71,7 +71,6 @@ export function CommandPanel({
   const canFire = canAct && !fireUsedThisTurn && hasAdjacentEnemy;
 
   const selectedFactionInfo = selectedCity ? FACTIONS[selectedCity.owner] : null;
-  const playerFactionInfo = FACTIONS[playerFaction];
 
   return (
     <aside
@@ -243,20 +242,20 @@ export function CommandPanel({
         </div>
       </div>
 
-      {/* End Turn Primary CTA */}
+      {/* End Turn CTA — Subdued while AP remains, vivid seal-red highlight once AP is 0 */}
       <button
         type="button"
         onClick={onEndTurn}
         disabled={isAiTurn}
         data-testid="btn-end-turn"
+        data-ap-empty={ap === 0 ? 'true' : 'false'}
         className={`flex min-h-[46px] w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 font-display text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a] whitespace-nowrap ${
           isAiTurn
             ? 'cursor-wait border border-[#c6b391] bg-[#e6dac2] text-[#635542]'
             : ap === 0
-              ? 'text-[#faf5ea] shadow-md hover:brightness-110'
-              : 'border border-[#231f1a] bg-[#231f1a] text-[#faf4e6] hover:bg-[#383128]'
+              ? 'border border-[#7e1f18] bg-[#9e2a22] text-[#faf5ea] shadow-md hover:bg-[#b23128]'
+              : 'border border-[#cbb895] bg-[#efe5d0] text-[#5e513e] hover:bg-[#e6d8bc] hover:text-[#2c241b]'
         }`}
-        style={!isAiTurn && ap === 0 ? { backgroundColor: playerFactionInfo.color } : undefined}
       >
         {isAiTurn ? (
           <span>

@@ -12,13 +12,16 @@ import {
 } from 'lucide-react';
 import { FACTIONS } from '../game/data';
 import { calculateAchievementScore, calculateVictoryRank } from '../game/engine';
+import { LUBU_TAUNT_LINES } from '../game/portraits';
+import { sound } from '../game/sound';
 import type { GameEventModalData, GameStats, PlayableFactionId } from '../game/types';
-import { submitHallOfFameEntry } from '../lib/supabase';
+import { submitHallOfFameEntry, type HallOfFameEntry } from '../lib/supabase';
 import {
   downloadCertificateImage,
   shareCertificateRecord,
   type CertificateData,
 } from '../utils/certificate';
+import { LordPortrait } from './LordPortrait';
 
 interface EventModalProps {
   event: GameEventModalData;
@@ -27,6 +30,9 @@ interface EventModalProps {
 
 export function EventModal({ event, onClose }: EventModalProps) {
   const isLuBu = Boolean(event.isLuBu);
+  const lubuTaunt = event.victimIsPlayer
+    ? LUBU_TAUNT_LINES.againstPlayer
+    : LUBU_TAUNT_LINES.againstRival;
 
   return (
     <div
@@ -34,58 +40,139 @@ export function EventModal({ event, onClose }: EventModalProps) {
       aria-modal="true"
       aria-labelledby="event-modal-title"
       data-testid={isLuBu ? 'lubu-event-modal' : 'random-event-modal'}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4"
     >
       <div
-        className={`w-full max-w-md rounded-lg border-2 bg-[#faf3e3] p-6 shadow-2xl ${
+        className={`w-full max-w-md overflow-hidden rounded-lg border-2 bg-[#faf3e3] shadow-2xl ${
           isLuBu ? 'border-[#581c5c]' : 'border-[#b89f76]'
         }`}
       >
-        <div className="mb-3 flex items-center gap-2.5">
+        {isLuBu ? (
+          /* Dramatic Lu Bu Arrival Stage — Purple Lightning & Crimson Flame Backdrop */
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white"
-            style={{ backgroundColor: event.accentColor }}
-            aria-hidden="true"
+            data-testid="lubu-appear-stage"
+            className="relative overflow-hidden px-5 pt-6 pb-5 text-center text-[#faf3e3]"
+            style={{
+              background:
+                'radial-gradient(circle at 50% 34%, rgba(138, 43, 146, 0.72) 0%, rgba(56, 16, 62, 0.96) 54%, rgba(24, 8, 28, 1) 100%)',
+            }}
           >
-            {isLuBu ? <AlertTriangle className="h-5 w-5" /> : <Flame className="h-5 w-5" />}
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-[#6b5b47]">{event.subtitle}</p>
-            <h2
-              id="event-modal-title"
-              className="font-display text-xl font-black text-[#1e1a15]"
+            {/* Subtle Crimson Ember Glow at Bottom */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-20"
+              style={{
+                background:
+                  'linear-gradient(0deg, rgba(220, 38, 38, 0.34) 0%, rgba(234, 88, 12, 0.14) 52%, transparent 100%)',
+              }}
+            />
+
+            {/* Purple Lightning Bolts SVG */}
+            <svg
+              viewBox="0 0 400 180"
+              aria-hidden="true"
+              className="lubu-lightning-pulse pointer-events-none absolute inset-0 h-full w-full"
+              preserveAspectRatio="none"
             >
-              {event.title}
-            </h2>
+              <path
+                d="M52 0 L84 48 L64 56 L106 118 L82 76 L102 68 Z"
+                fill="#e9b3ff"
+                fillOpacity="0.45"
+              />
+              <path
+                d="M348 0 L314 52 L334 60 L292 126 L318 80 L298 72 Z"
+                fill="#f0abfc"
+                fillOpacity="0.42"
+              />
+              <path
+                d="M28 165 Q100 130 155 170 T290 164 T385 174"
+                fill="none"
+                stroke="#f97316"
+                strokeWidth="2.5"
+                strokeOpacity="0.38"
+              />
+            </svg>
+
+            <div className="relative z-10 flex flex-col items-center">
+              <LordPortrait faction="lubu" emotion="appear" size="xl" />
+              <p className="mt-3 text-xs font-bold tracking-[0.14em] text-[#e7b8f0]">
+                {event.subtitle}
+              </p>
+              <h2
+                id="event-modal-title"
+                className="mt-0.5 font-display text-2xl font-black tracking-tight text-[#fff7ec]"
+              >
+                {event.title}
+              </h2>
+              <p
+                data-testid="lubu-taunt-line"
+                className="mt-3 w-full rounded-md border border-[#d89ce6]/35 bg-black/35 px-3.5 py-2 font-display text-xs font-bold leading-relaxed text-[#fce9ff] sm:text-sm"
+              >
+                {lubuTaunt}
+              </p>
+            </div>
           </div>
+        ) : (
+          <div className="px-6 pt-6">
+            <div className="mb-3 flex items-center gap-2.5">
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white"
+                style={{ backgroundColor: event.accentColor }}
+                aria-hidden="true"
+              >
+                <Flame className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#6b5b47]">{event.subtitle}</p>
+                <h2
+                  id="event-modal-title"
+                  className="font-display text-xl font-black text-[#1e1a15]"
+                >
+                  {event.title}
+                </h2>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={isLuBu ? 'p-5 sm:p-6' : 'px-6 pb-6'}>
+          {isLuBu && (
+            <div className="mb-2.5 flex items-center gap-1.5 text-xs font-bold text-[#581c5c]">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>긴급 전보</span>
+            </div>
+          )}
+
+          <p className="mb-4 text-sm leading-relaxed text-[#3a3126]">{event.description}</p>
+
+          <div
+            className="mb-5 rounded-md border px-3.5 py-2.5 text-xs font-semibold"
+            style={{
+              borderColor: `${event.accentColor}44`,
+              backgroundColor: `${event.accentColor}12`,
+              color: event.accentColor,
+            }}
+          >
+            {event.effectSummary}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              sound.playClick();
+              onClose();
+            }}
+            data-testid="btn-close-event"
+            className="min-h-[44px] w-full rounded-md px-4 py-2.5 font-display text-sm font-bold text-[#faf4e6] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a]"
+            style={{ backgroundColor: event.accentColor }}
+          >
+            {isLuBu
+              ? event.victimIsPlayer
+                ? '긴급 대응에 나선다'
+                : '형세를 주시한다'
+              : '확인'}
+          </button>
         </div>
-
-        <p className="mb-4 text-sm leading-relaxed text-[#3a3126]">{event.description}</p>
-
-        <div
-          className="mb-5 rounded-md border px-3.5 py-2.5 text-xs font-semibold"
-          style={{
-            borderColor: `${event.accentColor}44`,
-            backgroundColor: `${event.accentColor}12`,
-            color: event.accentColor,
-          }}
-        >
-          {event.effectSummary}
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          data-testid="btn-close-event"
-          className="min-h-[44px] w-full rounded-md px-4 py-2.5 font-display text-sm font-bold text-[#faf4e6] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a]"
-          style={{ backgroundColor: event.accentColor }}
-        >
-          {isLuBu
-            ? event.victimIsPlayer
-              ? '긴급 대응에 나선다'
-              : '형세를 주시한다'
-            : '확인'}
-        </button>
       </div>
     </div>
   );
@@ -100,7 +187,7 @@ interface SettlementModalProps {
   lubuDefeated: boolean;
   stats: GameStats;
   hasRegisteredHof: boolean;
-  onRegisteredHof: () => void;
+  onRegisteredHof: (entry: HallOfFameEntry) => void;
   onOpenHallOfFame: () => void;
   onRestart: () => void;
   onReturnLobby: () => void;
@@ -152,6 +239,7 @@ export function SettlementModal({
   const handleSubmitHof = async (e: FormEvent) => {
     e.preventDefault();
     if (hasRegisteredHof || submitting) return;
+    sound.playClick();
 
     const trimmed = nickname.trim();
     if (trimmed.length < 1 || trimmed.length > 12) {
@@ -162,7 +250,7 @@ export function SettlementModal({
     setSubmitting(true);
     setFormError(null);
     try {
-      await submitHallOfFameEntry({
+      const { entry } = await submitHallOfFameEntry({
         nickname: trimmed,
         faction: playerFaction,
         rank: rankInfo.rank,
@@ -170,7 +258,7 @@ export function SettlementModal({
         lubu_defeated: lubuDefeated,
         score: scoreInfo.totalScore,
       });
-      onRegisteredHof();
+      onRegisteredHof(entry);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다.');
     } finally {
@@ -180,6 +268,7 @@ export function SettlementModal({
 
   const handleSaveCertificate = async () => {
     if (savingImg) return;
+    sound.playClick();
     setSavingImg(true);
     setActionNotice(null);
     try {
@@ -194,6 +283,7 @@ export function SettlementModal({
 
   const handleShareRecord = async () => {
     if (sharing) return;
+    sound.playClick();
     setSharing(true);
     setActionNotice(null);
     try {
@@ -219,21 +309,27 @@ export function SettlementModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4"
     >
       <div className="max-h-[92dvh] w-full max-w-md overflow-x-hidden overflow-y-auto rounded-lg border-2 border-[#a88d5c] bg-[#faf3e3] p-4 shadow-2xl sm:p-6">
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#dfd0b3] pb-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-[#6e5d47]">
-              딸깍 삼국지 · {faction.name} · 제 {turn}턴 결산
+        <div className="mb-4 flex items-center justify-between gap-2.5 border-b border-[#dfd0b3] pb-4 sm:gap-3">
+          <LordPortrait
+            faction={playerFaction}
+            emotion={isVictory ? 'victory' : 'defeat'}
+            size="md"
+          />
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-[#6e5d47]">
+              딸깍 삼국지 · {faction.name} · 제 {turn}턴
             </p>
             <h2
               id="settlement-modal-title"
-              className="mt-0.5 font-display text-xl font-black text-[#1f1a14] sm:text-2xl"
+              className="mt-0.5 font-display text-lg font-black text-[#1f1a14] sm:text-2xl"
             >
               {isVictory ? '5분만에 천하통일!' : '세력 멸망'}
             </h2>
-            <p className="mt-1 text-xs text-[#594b3a]">
+            <p className="mt-0.5 text-xs text-[#594b3a]">
               {isVictory
                 ? `${rankInfo.title} — ${rankInfo.comment}`
-                : '모든 성지를 상실하여 대업이 좌절되었습니다. 다시 전열을 가다듬으세요.'}
+                : '모든 성지를 상실하여 대업이 좌절되었습니다.'}
             </p>
           </div>
 
@@ -249,10 +345,10 @@ export function SettlementModal({
             </div>
           ) : (
             <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-[#4a4138] text-[#faf3e3]"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-[#4a4138] text-[#faf3e3]"
               aria-hidden="true"
             >
-              <Crown className="h-7 w-7 opacity-70" />
+              <Crown className="h-6 w-6 opacity-70" />
             </div>
           )}
         </div>
@@ -321,7 +417,10 @@ export function SettlementModal({
                 </p>
                 <button
                   type="button"
-                  onClick={onOpenHallOfFame}
+                  onClick={() => {
+                    sound.playClick();
+                    onOpenHallOfFame();
+                  }}
                   data-testid="btn-view-hof-after-register"
                   className="inline-flex min-h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-md bg-[#9a7222] px-3.5 py-1.5 text-xs font-bold text-[#faf4e6] hover:brightness-110 whitespace-nowrap"
                 >
@@ -458,7 +557,10 @@ export function RulesModal({ onClose }: RulesModalProps) {
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              sound.playClick();
+              onClose();
+            }}
             aria-label="병법서 닫기"
             className="flex h-9 w-9 items-center justify-center rounded-md text-[#5c4f3d] hover:bg-[#ebe0c8]"
           >
@@ -527,11 +629,77 @@ export function RulesModal({ onClose }: RulesModalProps) {
 
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            sound.playClick();
+            onClose();
+          }}
           className="mt-5 min-h-[44px] w-full rounded-md bg-[#231f1a] px-4 py-2.5 font-display text-sm font-bold text-[#faf4e6] hover:bg-[#383128]"
         >
           전장으로 돌아가기
         </button>
+      </div>
+    </div>
+  );
+}
+
+interface EndTurnConfirmModalProps {
+  remainingAp: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+export function EndTurnConfirmModal({
+  remainingAp,
+  onCancel,
+  onConfirm,
+}: EndTurnConfirmModalProps) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="end-turn-confirm-title"
+      data-testid="end-turn-confirm-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+    >
+      <div className="w-full max-w-sm rounded-lg border-2 border-[#b49d76] bg-[#faf3e3] p-5 shadow-2xl sm:p-6">
+        <div className="mb-3 flex items-center gap-2.5">
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#b07d1f] text-[#faf4e6]"
+            aria-hidden="true"
+          >
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <h2
+            id="end-turn-confirm-title"
+            className="font-display text-lg font-bold text-[#1f1a14]"
+          >
+            아직 행동력이 남아 있습니다
+          </h2>
+        </div>
+
+        <p className="mb-5 text-sm leading-relaxed text-[#3f3529]">
+          남은 행동력이 <strong className="tabular-nums text-[#9e2a22]">{remainingAp}</strong>{' '}
+          있습니다. 행동을 마저 하지 않고 정말 턴을 넘기시겠습니까?
+        </p>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={onCancel}
+            data-testid="btn-cancel-end-turn"
+            className="min-h-[44px] rounded-md border border-[#bda884] bg-[#efe4cc] px-3 py-2 text-xs font-bold text-[#2b241c] transition-colors hover:bg-[#e5d6b7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a] whitespace-nowrap sm:text-sm"
+          >
+            취소 (계속 행동)
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            data-testid="btn-confirm-end-turn"
+            className="min-h-[44px] rounded-md bg-[#9e2a22] px-3 py-2 font-display text-xs font-bold text-[#faf4e6] transition-colors hover:bg-[#b53228] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a] whitespace-nowrap sm:text-sm"
+          >
+            턴 넘기기
+          </button>
+        </div>
       </div>
     </div>
   );

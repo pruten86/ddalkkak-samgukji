@@ -8,16 +8,21 @@ import {
   checkLuBuAppearance,
   countTerritories,
   createInitialCities,
+  createInitialGameState,
   executeFireAttack,
   executeMarchOrTransport,
   executeRecruit,
+  formatEliminationRewardMessage,
   getCombatForecast,
   getDefenseMultiplier,
   getRecruitAmount,
   getSendTroops,
   hasDefeatedLuBu,
+  isMajorEliminationReward,
   planAiAction,
+  reserveVictoryBonusAp,
   resolveCombat,
+  resolveNextPlayerTurnAp,
   triggerThreeTurnEvent,
 } from './engine';
 import type { CityId } from './types';
@@ -249,5 +254,83 @@ test('hasDefeatedLuBu returns true only if Lu Bu spawned and now owns 0 cities',
   // Spawned and wiped out -> true!
   cities.chengdu.owner = 'shu';
   assert.equal(hasDefeatedLuBu(true, cities), true);
+});
+
+test('eliminating Lu Bu or a rival major lord grants 3 AP next turn, then returns to 2 AP on the following turn', () => {
+  const initial = createInitialGameState('shu', 'playing');
+  assert.equal(initial.maxAp, 2);
+  assert.equal(initial.turnMaxAp, 2);
+  assert.equal(initial.nextTurnBonusAp, 0);
+  assert.equal(initial.victoryApBonusActive, false);
+
+  // Case A: Player (shu) captures Lu Bu's last city (hanzhong)
+  const citiesLuBu = createInitialCities();
+  citiesLuBu.chengdu.owner = 'shu';
+  citiesLuBu.chengdu.troops = 140;
+  citiesLuBu.hanzhong.owner = 'lubu';
+  citiesLuBu.hanzhong.troops = 20;
+
+  const resLuBu = executeMarchOrTransport(citiesLuBu, 'chengdu', 'hanzhong', 0.8, () => 0.5);
+  assert.ok(resLuBu?.battle?.attackerWon);
+  const lubuEliminated = isMajorEliminationReward(
+    'shu',
+    resLuBu.battle.defenderFaction,
+    'shu',
+    resLuBu.cities
+  );
+  assert.equal(lubuEliminated, true);
+  assert.ok(formatEliminationRewardMessage('lubu').includes('다음 턴 행동력 +1'));
+
+  const reservedAfterLuBu = reserveVictoryBonusAp(initial.nextTurnBonusAp, lubuEliminated);
+  assert.equal(reservedAfterLuBu, 1);
+
+  // Next turn -> AP becomes 3 (turnMaxAp = 3), nextTurnBonusAp resets to 0
+  const nextTurnAfterLuBu = resolveNextPlayerTurnAp(initial.maxAp, reservedAfterLuBu, 0);
+  assert.equal(nextTurnAfterLuBu.turnMaxAp, 3);
+  assert.equal(nextTurnAfterLuBu.ap, 3);
+  assert.equal(nextTurnAfterLuBu.nextTurnBonusAp, 0);
+  assert.equal(nextTurnAfterLuBu.victoryApBonusActive, true);
+
+  // Following turn (no new elimination) -> AP returns to 2 (turnMaxAp = 2)
+  const followingTurn = resolveNextPlayerTurnAp(initial.maxAp, nextTurnAfterLuBu.nextTurnBonusAp, 0);
+  assert.equal(followingTurn.turnMaxAp, 2);
+  assert.equal(followingTurn.ap, 2);
+  assert.equal(followingTurn.nextTurnBonusAp, 0);
+  assert.equal(followingTurn.victoryApBonusActive, false);
+
+  // Case B: Player (shu) eliminates rival major lord Wei's last remaining city (xuchang)
+  const citiesWei = createInitialCities();
+  citiesWei.xiapi.owner = 'shu'; // Leave Wei with only xuchang
+  citiesWei.xiangyang.owner = 'shu';
+  citiesWei.xiangyang.troops = 150;
+  citiesWei.xuchang.owner = 'wei';
+  citiesWei.xuchang.troops = 20;
+
+  const resWei = executeMarchOrTransport(citiesWei, 'xiangyang', 'xuchang', 0.8, () => 0.5);
+  assert.ok(resWei?.battle?.attackerWon);
+  const weiEliminated = isMajorEliminationReward(
+    'shu',
+    resWei.battle.defenderFaction,
+    'shu',
+    resWei.cities
+  );
+  assert.equal(weiEliminated, true);
+  assert.equal(formatEliminationRewardMessage('wei'), '🏆 조조(위) 멸망! 다음 턴 행동력 +1 획득!');
+
+  // Even if two major factions fall in the same turn, bonus stays capped at +1 (total 3)
+  const doubleReserved = reserveVictoryBonusAp(reservedAfterLuBu, weiEliminated);
+  assert.equal(doubleReserved, 1);
+  const turnWithSoutheastWind = resolveNextPlayerTurnAp(initial.maxAp, doubleReserved, 1);
+  assert.equal(turnWithSoutheastWind.turnMaxAp, 3);
+  assert.equal(turnWithSoutheastWind.ap, 4); // 3 base+victory + 1 southeast wind
+  assert.equal(turnWithSoutheastWind.victoryApBonusActive, true);
+
+  // Exclusions: neutral capture or AI eliminating another AI must NOT trigger reward
+  const citiesNeutral = createInitialCities();
+  for (const id of ALL_CITY_IDS) {
+    if (citiesNeutral[id].owner === 'neutral') citiesNeutral[id].owner = 'shu';
+  }
+  assert.equal(isMajorEliminationReward('shu', 'neutral', 'shu', citiesNeutral), false);
+  assert.equal(isMajorEliminationReward('wu', 'wei', 'shu', resWei.cities), false);
 });
 

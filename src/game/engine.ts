@@ -69,6 +69,9 @@ export function createInitialGameState(
     turn: 1,
     ap: MAX_AP,
     maxAp: MAX_AP,
+    turnMaxAp: MAX_AP,
+    nextTurnBonusAp: 0,
+    victoryApBonusActive: false,
     fireUsedThisTurn: false,
     fireEnhancedThisTurn: false,
     cities,
@@ -700,6 +703,65 @@ export function hasDefeatedLuBu(
 ): boolean {
   if (!lubuSpawned) return false;
   return countTerritories(cities).lubu === 0;
+}
+
+/**
+ * Checks whether capturing a city eliminated Lu Bu or a rival playable lord (wei/shu/wu).
+ * Excludes neutral cities and AI-on-AI eliminations.
+ */
+export function isMajorEliminationReward(
+  attackerFaction: FactionId,
+  defenderFaction: FactionId,
+  playerFaction: PlayableFactionId,
+  citiesAfterBattle: Record<CityId, CityState>
+): boolean {
+  if (attackerFaction !== playerFaction) return false;
+  if (defenderFaction === 'neutral' || defenderFaction === playerFaction) return false;
+  return countTerritories(citiesAfterBattle)[defenderFaction] === 0;
+}
+
+/**
+ * Reserves +1 next-turn AP bonus on elimination (capped at +1 even if 2 factions fall in one turn).
+ */
+export function reserveVictoryBonusAp(
+  currentNextTurnBonusAp: number,
+  eliminatedMajorFaction: boolean
+): number {
+  if (eliminatedMajorFaction) return 1;
+  return currentNextTurnBonusAp > 0 ? 1 : 0;
+}
+
+/**
+ * Computes AP values for the start of the next player turn and resets nextTurnBonusAp to 0.
+ * Any event bonus AP (e.g. Southeast Wind) stacks on top of turnMaxAp.
+ */
+export function resolveNextPlayerTurnAp(
+  baseMaxAp: number,
+  nextTurnBonusAp: number,
+  eventBonusAp = 0
+): {
+  turnMaxAp: number;
+  ap: number;
+  nextTurnBonusAp: number;
+  victoryApBonusActive: boolean;
+} {
+  const appliedVictoryBonus = nextTurnBonusAp > 0 ? 1 : 0;
+  const turnMaxAp = baseMaxAp + appliedVictoryBonus;
+  const ap = turnMaxAp + Math.max(0, eventBonusAp);
+  return {
+    turnMaxAp,
+    ap,
+    nextTurnBonusAp: 0,
+    victoryApBonusActive: appliedVictoryBonus > 0,
+  };
+}
+
+export function formatEliminationRewardMessage(eliminatedFaction: FactionId): string {
+  if (eliminatedFaction === 'lubu') {
+    return '🏆 여포군 토벌 완료! 승전의 기세로 다음 턴 행동력 +1 (3회 행동)';
+  }
+  const f = FACTIONS[eliminatedFaction];
+  return `🏆 ${f.ruler}(${f.shortName}) 멸망! 다음 턴 행동력 +1 획득!`;
 }
 
 export function calculateAchievementScore(

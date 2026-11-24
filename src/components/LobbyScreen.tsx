@@ -1,6 +1,7 @@
 import { ArrowLeft, Trophy } from 'lucide-react';
 import { FACTIONS } from '../game/data';
 import type { PlayableFactionId } from '../game/types';
+import { LordPortrait } from './LordPortrait';
 
 interface LobbyScreenProps {
   selectedFaction: PlayableFactionId;
@@ -57,7 +58,7 @@ export function LobbyScreen({
 
       {/* Main Lobby Content */}
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-5 py-6 sm:px-10 lg:px-14">
-        <div className="max-w-3xl">
+        <div className="max-w-4xl">
           {/* Official Brand Lockup */}
           <div className="mb-5 flex items-center gap-3.5">
             <svg
@@ -144,23 +145,32 @@ export function LobbyScreen({
                           : undefined
                       }
                     >
-                      <div className="mb-1.5 flex w-full items-center justify-between gap-2">
-                        <span className="font-display text-base font-bold text-[#1f1a15] whitespace-nowrap">
-                          {f.name}
-                        </span>
-                        <span
-                          className="h-3.5 w-3.5 shrink-0 rounded-sm border border-black/20"
-                          style={{ backgroundColor: f.color }}
-                          aria-hidden="true"
+                      <div className="mb-2 flex w-full items-center gap-2.5">
+                        <LordPortrait
+                          faction={fid}
+                          emotion={active ? 'victory' : 'idle'}
+                          size="sm"
                         />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-display text-base font-bold text-[#1f1a15] whitespace-nowrap">
+                              {f.name}
+                            </span>
+                            <span
+                              className="h-3 w-3 shrink-0 rounded-sm border border-black/20"
+                              style={{ backgroundColor: f.color }}
+                              aria-hidden="true"
+                            />
+                          </div>
+                          <p
+                            className="mt-0.5 text-xs font-semibold whitespace-nowrap"
+                            style={{ color: f.darkColor }}
+                          >
+                            [{f.traitName}] {f.traitSummary}
+                          </p>
+                        </div>
                       </div>
-                      <p
-                        className="text-xs font-semibold whitespace-nowrap"
-                        style={{ color: f.darkColor }}
-                      >
-                        [{f.traitName}] {f.traitSummary}
-                      </p>
-                      <p className="mt-1 text-[11px] text-[#6a5d4b]">
+                      <p className="text-[11px] text-[#6a5d4b]">
                         {f.startSummary}
                       </p>
                     </button>

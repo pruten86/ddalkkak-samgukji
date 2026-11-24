@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { BattleCutIn, type BattleCutInData } from './components/BattleCutIn';
 import { CommandPanel } from './components/CommandPanel';
-import { EventModal, RulesModal, SettlementModal } from './components/GameModals';
+import {
+  EndTurnConfirmModal,
+  EventModal,
+  RulesModal,
+  SettlementModal,
+} from './components/GameModals';
 import { HallOfFameModal } from './components/HallOfFameModal';
 import { LegendBar } from './components/LegendBar';
 import { LobbyScreen } from './components/LobbyScreen';
+import { LordStatusBar } from './components/LordStatusBar';
 import { SplashScreen } from './components/SplashScreen';
 import { StrategyMap } from './components/StrategyMap';
 import { FACTIONS, MAX_AP, PLAYABLE_FACTIONS } from './game/data';
@@ -18,11 +25,20 @@ import {
   executeFireAttack,
   executeMarchOrTransport,
   executeRecruit,
+  formatEliminationRewardMessage,
   getOwnedCities,
   hasDefeatedLuBu,
+  isMajorEliminationReward,
   planAiAction,
+  reserveVictoryBonusAp,
+  resolveNextPlayerTurnAp,
   triggerThreeTurnEvent,
 } from './game/engine';
+import {
+  pickLordLine,
+  type LordReactionTrigger,
+  type PortraitEmotion,
+} from './game/portraits';
 import { sound } from './game/sound';
 import type {
   ChronicleEntry,
@@ -34,6 +50,7 @@ import type {
   MarchRatio,
   PlayableFactionId,
 } from './game/types';
+import type { HallOfFameEntry } from './lib/supabase';
 
 function createBootGameState(): GameState {
   if (typeof window === 'undefined') {
@@ -54,14 +71,113 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showHallOfFame, setShowHallOfFame] = useState(false);
+  const [showEndTurnConfirm, setShowEndTurnConfirm] = useState(false);
   const [hasRegisteredHof, setHasRegisteredHof] = useState(false);
+  const [recentHofEntry, setRecentHofEntry] = useState<HallOfFameEntry | null>(null);
   const [marchArrows, setMarchArrows] = useState<MarchArrowEffect[]>([]);
   const [cityBursts, setCityBursts] = useState<CityBurstEffect[]>([]);
   const [shakeMap, setShakeMap] = useState(false);
+  const [lordEmotion, setLordEmotion] = useState<PortraitEmotion>('idle');
+  const [lordLine, setLordLine] = useState<string>(() => pickLordLine(state.playerFaction, 'idle', 0));
+  const [lubuEmotion, setLubuEmotion] = useState<PortraitEmotion>('idle');
+  const [battleCutIn, setBattleCutIn] = useState<BattleCutInData | null>(null);
 
   const aiAbortRef = useRef<number>(0);
+  const lordTimerRef = useRef<number | null>(null);
+  const lubuTimerRef = useRef<number | null>(null);
+  const cutInTimerRef = useRef<number | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  useEffect(() => {
+    return () => {
+      if (lordTimerRef.current !== null) window.clearTimeout(lordTimerRef.current);
+      if (lubuTimerRef.current !== null) window.clearTimeout(lubuTimerRef.current);
+      if (cutInTimerRef.current !== null) window.clearTimeout(cutInTimerRef.current);
+    };
+  }, []);
+
+  const dismissBattleCutIn = useCallback(() => {
+    if (cutInTimerRef.current !== null) {
+      window.clearTimeout(cutInTimerRef.current);
+      cutInTimerRef.current = null;
+    }
+    setBattleCutIn(null);
+  }, []);
+
+  const showBattleCutIn = useCallback(
+    (payload: Omit<BattleCutInData, 'id'>, duration = 1200) => {
+      if (cutInTimerRef.current !== null) {
+        window.clearTimeout(cutInTimerRef.current);
+        cutInTimerRef.current = null;
+      }
+      const next: BattleCutInData = { ...payload, id: uid('cutin') };
+      setBattleCutIn(next);
+      cutInTimerRef.current = window.setTimeout(() => {
+        cutInTimerRef.current = null;
+        setBattleCutIn((current) => (current?.id === next.id ? null : current));
+      }, duration);
+    },
+    []
+  );
+
+  const resetLordStatus = useCallback(
+    (faction: PlayableFactionId) => {
+      if (lordTimerRef.current !== null) {
+        window.clearTimeout(lordTimerRef.current);
+        lordTimerRef.current = null;
+      }
+      if (lubuTimerRef.current !== null) {
+        window.clearTimeout(lubuTimerRef.current);
+        lubuTimerRef.current = null;
+      }
+      dismissBattleCutIn();
+      setLordEmotion('idle');
+      setLubuEmotion('idle');
+      setLordLine(pickLordLine(faction, 'idle', 0));
+    },
+    [dismissBattleCutIn]
+  );
+
+  const triggerLordReaction = useCallback(
+    (
+      emotion: PortraitEmotion,
+      trigger: LordReactionTrigger,
+      duration = 1500,
+      overrideLine?: string
+    ) => {
+      if (lordTimerRef.current !== null) {
+        window.clearTimeout(lordTimerRef.current);
+        lordTimerRef.current = null;
+      }
+      const faction = stateRef.current.playerFaction;
+      setLordEmotion(emotion);
+      setLordLine(overrideLine ?? pickLordLine(faction, trigger));
+
+      if (emotion !== 'idle') {
+        lordTimerRef.current = window.setTimeout(() => {
+          lordTimerRef.current = null;
+          setLordEmotion('idle');
+          setLordLine(pickLordLine(stateRef.current.playerFaction, 'idle'));
+        }, duration);
+      }
+    },
+    []
+  );
+
+  const triggerLubuReaction = useCallback((emotion: PortraitEmotion, duration = 1600) => {
+    if (lubuTimerRef.current !== null) {
+      window.clearTimeout(lubuTimerRef.current);
+      lubuTimerRef.current = null;
+    }
+    setLubuEmotion(emotion);
+    if (emotion !== 'idle') {
+      lubuTimerRef.current = window.setTimeout(() => {
+        lubuTimerRef.current = null;
+        setLubuEmotion('idle');
+      }, duration);
+    }
+  }, []);
 
   // Mirror game state machine to document.body.dataset.state
   useEffect(() => {
@@ -118,59 +234,79 @@ export default function App() {
     setMuted((prev) => {
       const next = !prev;
       sound.setMuted(next);
+      if (!next) {
+        sound.playClick();
+      }
       return next;
     });
   }, []);
 
   const handleProceedFromSplash = useCallback(() => {
-    sound.playDrum();
     setState((prev) => ({ ...prev, phase: 'lobby' }));
   }, []);
 
   const handleBackToSplash = useCallback(() => {
     aiAbortRef.current += 1;
-    sound.playSelect();
+    sound.playClick();
     setShowHallOfFame(false);
     setShowRules(false);
+    setShowEndTurnConfirm(false);
+    resetLordStatus(stateRef.current.playerFaction);
     setState((prev) => createInitialGameState(prev.playerFaction, 'splash'));
-  }, []);
+  }, [resetLordStatus]);
 
-  const handleSelectLobbyFaction = useCallback((faction: PlayableFactionId) => {
-    sound.playSelect();
-    setState((prev) => createInitialGameState(faction, prev.phase));
-  }, []);
+  const handleSelectLobbyFaction = useCallback(
+    (faction: PlayableFactionId) => {
+      sound.playClick();
+      resetLordStatus(faction);
+      setState((prev) => createInitialGameState(faction, prev.phase));
+    },
+    [resetLordStatus]
+  );
 
   const handleStartGame = useCallback(() => {
     aiAbortRef.current += 1;
-    sound.playDrum();
+    sound.playClick();
+    sound.playDrum(0.03);
     setMarchArrows([]);
     setCityBursts([]);
     setShowRules(false);
     setShowHallOfFame(false);
+    setShowEndTurnConfirm(false);
     setHasRegisteredHof(false);
+    setRecentHofEntry(null);
+    resetLordStatus(stateRef.current.playerFaction);
     setState((prev) => createInitialGameState(prev.playerFaction, 'playing'));
-  }, []);
+  }, [resetLordStatus]);
 
   const handleRestartSameFaction = useCallback(() => {
     aiAbortRef.current += 1;
-    sound.playDrum();
+    sound.playClick();
+    sound.playDrum(0.03);
     setMarchArrows([]);
     setCityBursts([]);
     setShowRules(false);
     setShowHallOfFame(false);
+    setShowEndTurnConfirm(false);
     setHasRegisteredHof(false);
+    setRecentHofEntry(null);
+    resetLordStatus(stateRef.current.playerFaction);
     setState((prev) => createInitialGameState(prev.playerFaction, 'playing'));
-  }, []);
+  }, [resetLordStatus]);
 
   const handleReturnLobby = useCallback(() => {
     aiAbortRef.current += 1;
+    sound.playClick();
     setMarchArrows([]);
     setCityBursts([]);
     setShowRules(false);
     setShowHallOfFame(false);
+    setShowEndTurnConfirm(false);
     setHasRegisteredHof(false);
+    setRecentHofEntry(null);
+    resetLordStatus(stateRef.current.playerFaction);
     setState((prev) => createInitialGameState(prev.playerFaction, 'lobby'));
-  }, []);
+  }, [resetLordStatus]);
 
   const handleRecruit = useCallback(() => {
     const cur = stateRef.current;
@@ -179,8 +315,10 @@ export default function App() {
     if (!city || city.owner !== cur.playerFaction) return;
 
     const { cities: nextCities, gained } = executeRecruit(cur.cities, city.id);
-    sound.playDrum();
+    sound.playClick();
+    sound.playDrum(0.028);
     spawnBurst(city.id, 'recruit', `+${gained}`, FACTIONS[cur.playerFaction].color);
+    triggerLordReaction('victory', 'recruit', 1500);
 
     const logEntry: ChronicleEntry = {
       id: uid('log'),
@@ -196,10 +334,10 @@ export default function App() {
       commandMode: 'idle',
       chronicle: [logEntry, ...prev.chronicle].slice(0, 30),
     }));
-  }, [spawnBurst]);
+  }, [spawnBurst, triggerLordReaction]);
 
   const handleToggleMarchMode = useCallback(() => {
-    sound.playSelect();
+    sound.playClick();
     setState((prev) => ({
       ...prev,
       commandMode: prev.commandMode === 'march' ? 'idle' : 'march',
@@ -207,7 +345,7 @@ export default function App() {
   }, []);
 
   const handleToggleFireMode = useCallback(() => {
-    sound.playSelect();
+    sound.playClick();
     setState((prev) => ({
       ...prev,
       commandMode: prev.commandMode === 'fire' ? 'idle' : 'fire',
@@ -215,11 +353,12 @@ export default function App() {
   }, []);
 
   const handleChangeMarchRatio = useCallback((ratio: MarchRatio) => {
-    sound.playSelect();
+    sound.playClick();
     setState((prev) => ({ ...prev, marchRatio: ratio }));
   }, []);
 
   const handleCancelMode = useCallback(() => {
+    sound.playClick();
     setState((prev) => ({ ...prev, commandMode: 'idle' }));
   }, []);
 
@@ -243,7 +382,7 @@ export default function App() {
         if (!res) return;
 
         if (res.kind === 'transport') {
-          sound.playSelect();
+          sound.playClick();
           spawnArrow(selected.id, targetId, cur.playerFaction, res.sentTroops, 'transport');
           spawnBurst(targetId, 'recruit', `+${res.sentTroops}`, FACTIONS[cur.playerFaction].color);
 
@@ -280,6 +419,17 @@ export default function App() {
         const outcome = checkOutcome(res.cities, cur.playerFaction);
         const counts = countTerritories(res.cities);
         const defeatedLuBuNow = cur.lubuDefeated || hasDefeatedLuBu(cur.lubuSpawned, res.cities);
+        const eliminatedMajorFaction =
+          battle.attackerWon &&
+          isMajorEliminationReward(
+            cur.playerFaction,
+            battle.defenderFaction,
+            cur.playerFaction,
+            res.cities
+          );
+        const eliminationRewardText = eliminatedMajorFaction
+          ? formatEliminationRewardMessage(battle.defenderFaction)
+          : null;
 
         const logEntry: ChronicleEntry = {
           id: uid('log'),
@@ -292,13 +442,52 @@ export default function App() {
         };
 
         const extraLogs: ChronicleEntry[] = [logEntry];
-        if (!cur.lubuDefeated && defeatedLuBuNow) {
+        if (eliminationRewardText) {
+          extraLogs.unshift({
+            id: uid('elim-reward'),
+            turn: cur.turn,
+            text: eliminationRewardText,
+            faction: battle.defenderFaction,
+            highlight: battle.defenderFaction === 'lubu' ? 'lubu' : 'event',
+          });
+        } else if (!cur.lubuDefeated && defeatedLuBuNow) {
           extraLogs.unshift({
             id: uid('lubu-defeated'),
             turn: cur.turn,
             text: '천하무쌍 여포군을 완전히 토벌했습니다! (+1,500점 보너스 확보)',
             faction: 'lubu',
             highlight: 'lubu',
+          });
+        }
+
+        if (battle.attackerWon) {
+          triggerLordReaction(
+            'victory',
+            !cur.lubuDefeated && defeatedLuBuNow ? 'lubu_defeated' : 'attack_win',
+            eliminationRewardText ? 2600 : 1500,
+            eliminationRewardText ?? undefined
+          );
+          showBattleCutIn({
+            kind: 'capture',
+            cityName: target.name,
+            attackerFaction: battle.attackerFaction,
+            defenderFaction: battle.defenderFaction,
+            attackerEmotion: 'victory',
+            defenderEmotion: 'defeat',
+            headline: `⚔️ ${target.name} 점령!`,
+            subline: `${FACTIONS[battle.attackerFaction].ruler} 승 · 잔여 ${battle.remainingTroops}명`,
+          });
+        } else {
+          triggerLordReaction('defeat', 'attack_lose', 1500);
+          showBattleCutIn({
+            kind: 'defend',
+            cityName: target.name,
+            attackerFaction: battle.attackerFaction,
+            defenderFaction: battle.defenderFaction,
+            attackerEmotion: 'defeat',
+            defenderEmotion: 'victory',
+            headline: `🛡️ ${target.name} 수성 성공!`,
+            subline: `${FACTIONS[battle.defenderFaction].ruler} 방어 · 잔여 ${battle.remainingTroops}명`,
           });
         }
 
@@ -311,6 +500,7 @@ export default function App() {
           phase: outcome ?? prev.phase,
           cities: res.cities,
           ap: prev.ap - 1,
+          nextTurnBonusAp: reserveVictoryBonusAp(prev.nextTurnBonusAp, eliminatedMajorFaction),
           selectedCityId: battle.attackerWon ? targetId : selected.id,
           commandMode: 'idle',
           lubuDefeated: prev.lubuDefeated || defeatedLuBuNow,
@@ -346,6 +536,17 @@ export default function App() {
         sound.playFire();
         triggerShake();
         spawnBurst(targetId, 'fire', `화공 -${res.troopsLost}`, '#d9480f', 1200);
+        triggerLordReaction('fire', 'fire', 1500);
+        showBattleCutIn({
+          kind: 'fire',
+          cityName: target.name,
+          attackerFaction: cur.playerFaction,
+          defenderFaction: target.owner,
+          attackerEmotion: 'fire',
+          defenderEmotion: 'defeat',
+          headline: `🔥 ${target.name} 화공 적중!`,
+          subline: `적 병력 -${res.troopsLost}명 소멸`,
+        });
 
         const logEntry: ChronicleEntry = {
           id: uid('log'),
@@ -371,19 +572,22 @@ export default function App() {
       }
 
       // Default: select clicked city & reset command mode
-      sound.playSelect();
+      sound.playClick();
       setState((prev) => ({
         ...prev,
         selectedCityId: targetId,
         commandMode: 'idle',
       }));
     },
-    [spawnArrow, spawnBurst, triggerShake]
+    [showBattleCutIn, spawnArrow, spawnBurst, triggerLordReaction, triggerShake]
   );
 
   const handleEndTurn = useCallback(async () => {
     const startSnap = stateRef.current;
     if (startSnap.phase !== 'playing' || startSnap.isAiTurn || startSnap.pendingEvent) return;
+
+    // Signature '딸-깍' on every confirmed turn transition
+    sound.playDdalkkak();
 
     const runToken = ++aiAbortRef.current;
     setState((prev) => ({
@@ -430,8 +634,36 @@ export default function App() {
               workingLubuDefeated = true;
             }
             sound.playClash();
+            if (aiFaction === 'lubu') {
+              triggerLubuReaction('attack', 1200);
+            }
             if (res.battle.defenderFaction === playerFaction) {
               triggerShake();
+              if (res.battle.attackerWon) {
+                triggerLordReaction('defeat', 'defend_lose', 1500);
+                showBattleCutIn({
+                  kind: 'capture',
+                  cityName: toName,
+                  attackerFaction: aiFaction,
+                  defenderFaction: playerFaction,
+                  attackerEmotion: 'victory',
+                  defenderEmotion: 'defeat',
+                  headline: `⚔️ ${toName} 점령!`,
+                  subline: `${FACTIONS[aiFaction].ruler} 침공 · 잔여 ${res.battle.remainingTroops}명`,
+                });
+              } else {
+                triggerLordReaction('defend', 'defend_win', 1500);
+                showBattleCutIn({
+                  kind: 'defend',
+                  cityName: toName,
+                  attackerFaction: aiFaction,
+                  defenderFaction: playerFaction,
+                  attackerEmotion: 'defeat',
+                  defenderEmotion: 'victory',
+                  headline: `🛡️ ${toName} 수성 성공!`,
+                  subline: `${FACTIONS[playerFaction].ruler} 방어 · 잔여 ${res.battle.remainingTroops}명`,
+                });
+              }
             }
             spawnBurst(
               plan.toId,
@@ -502,7 +734,7 @@ export default function App() {
     let nextLubuTarget = startSnap.lubuTargetFaction;
     let pendingEvent = null;
     let nextEnhanceFire = false;
-    let nextAp = MAX_AP;
+    let eventBonusAp = 0;
     const turnStartLogs: ChronicleEntry[] = [];
 
     const lubuCheck = checkLuBuAppearance(
@@ -521,6 +753,8 @@ export default function App() {
       sound.playLuBuAlert();
       triggerShake();
       spawnBurst(lubuCheck.betrayedCityId, 'lubu', '여포 출현!', FACTIONS.lubu.color, 1600);
+      triggerLubuReaction('appear', 1800);
+      triggerLordReaction('defend', 'lubu_spawn', 1800);
 
       turnStartLogs.push({
         id: uid('lubu-log'),
@@ -534,7 +768,7 @@ export default function App() {
       workingCities = ev.cities;
       pendingEvent = ev.eventModal;
       nextEnhanceFire = ev.enhanceFireThisTurn;
-      nextAp = MAX_AP + ev.bonusAp;
+      eventBonusAp = ev.bonusAp;
 
       if (ev.eventModal.type === 'southeast_wind') {
         sound.playFire();
@@ -553,6 +787,12 @@ export default function App() {
       });
     }
 
+    const apRoll = resolveNextPlayerTurnAp(
+      startSnap.maxAp,
+      startSnap.nextTurnBonusAp,
+      eventBonusAp
+    );
+
     const finalOutcome = checkOutcome(workingCities, playerFaction);
     const counts = countTerritories(workingCities);
     if (finalOutcome === 'victory') sound.playFanfare();
@@ -569,7 +809,10 @@ export default function App() {
       ...prev,
       phase: finalOutcome ?? prev.phase,
       turn: nextTurn,
-      ap: nextAp,
+      ap: apRoll.ap,
+      turnMaxAp: apRoll.turnMaxAp,
+      nextTurnBonusAp: apRoll.nextTurnBonusAp,
+      victoryApBonusActive: apRoll.victoryApBonusActive,
       fireUsedThisTurn: false,
       fireEnhancedThisTurn: nextEnhanceFire,
       cities: workingCities,
@@ -586,7 +829,23 @@ export default function App() {
         peakTerritories: Math.max(prev.stats.peakTerritories, counts[playerFaction]),
       },
     }));
-  }, [spawnArrow, spawnBurst, triggerShake]);
+  }, [showBattleCutIn, spawnArrow, spawnBurst, triggerLordReaction, triggerLubuReaction, triggerShake]);
+
+  const handleRequestEndTurn = useCallback(() => {
+    const cur = stateRef.current;
+    if (cur.phase !== 'playing' || cur.isAiTurn || cur.pendingEvent) return;
+    if (cur.ap > 0) {
+      sound.playClick();
+      setShowEndTurnConfirm(true);
+      return;
+    }
+    void handleEndTurn();
+  }, [handleEndTurn]);
+
+  const handleConfirmEndTurn = useCallback(() => {
+    setShowEndTurnConfirm(false);
+    void handleEndTurn();
+  }, [handleEndTurn]);
 
   // Global keyboard shortcuts during gameplay & modals
   useEffect(() => {
@@ -594,6 +853,10 @@ export default function App() {
       const cur = stateRef.current;
 
       if (e.key === 'Escape') {
+        if (showEndTurnConfirm) {
+          setShowEndTurnConfirm(false);
+          return;
+        }
         if (showHallOfFame) {
           setShowHallOfFame(false);
           return;
@@ -625,17 +888,18 @@ export default function App() {
         !cur.isAiTurn &&
         !cur.pendingEvent &&
         !showRules &&
-        !showHallOfFame
+        !showHallOfFame &&
+        !showEndTurnConfirm
       ) {
         const tag = (e.target as HTMLElement | null)?.tagName;
         if (tag === 'BUTTON' || tag === 'INPUT') return;
         e.preventDefault();
-        void handleEndTurn();
+        handleRequestEndTurn();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleEndTurn, showHallOfFame, showRules, toggleMute]);
+  }, [handleRequestEndTurn, showEndTurnConfirm, showHallOfFame, showRules, toggleMute]);
 
   const counts = useMemo(() => countTerritories(state.cities), [state.cities]);
   const playerTotalTroops = useMemo(
@@ -658,11 +922,16 @@ export default function App() {
           onStart={handleStartGame}
           onBackToSplash={handleBackToSplash}
           onOpenHallOfFame={() => {
-            sound.playSelect();
+            sound.playClick();
             setShowHallOfFame(true);
           }}
         />
-        {showHallOfFame && <HallOfFameModal onClose={() => setShowHallOfFame(false)} />}
+        {showHallOfFame && (
+          <HallOfFameModal
+            recentEntry={recentHofEntry}
+            onClose={() => setShowHallOfFame(false)}
+          />
+        )}
       </>
     );
   }
@@ -711,15 +980,26 @@ export default function App() {
                 ·
               </span>
 
-              {/* Action Point (AP) Visual Seal Pips */}
+              {/* Action Point (AP) Visual Seal Pips (gold-rimmed when victory +1 AP bonus is active) */}
               <div
-                className="flex items-center gap-1.5 whitespace-nowrap"
-                aria-label={`남은 행동력 ${state.ap}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap ${
+                  state.victoryApBonusActive
+                    ? 'rounded-md border border-[#e3b94f] bg-[#3f3116] px-2 py-0.5 shadow-[0_0_8px_rgba(227,185,79,0.28)]'
+                    : ''
+                }`}
+                aria-label={`남은 행동력 ${state.ap}/${state.turnMaxAp}${state.victoryApBonusActive ? ' (승전 +1)' : ''}`}
                 data-testid="hud-ap"
+                data-victory-bonus={state.victoryApBonusActive ? 'true' : 'false'}
               >
-                <span className="text-[11px] text-[#cbbca3]">행동력</span>
+                <span
+                  className={`text-[11px] ${
+                    state.victoryApBonusActive ? 'font-bold text-[#f7dc88]' : 'text-[#cbbca3]'
+                  }`}
+                >
+                  행동력
+                </span>
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.max(state.maxAp, state.ap) }).map((_, idx) => {
+                  {Array.from({ length: Math.max(state.turnMaxAp, state.ap) }).map((_, idx) => {
                     const filled = idx < state.ap;
                     return (
                       <span
@@ -734,7 +1014,18 @@ export default function App() {
                     );
                   })}
                 </div>
-                <span className="tabular-nums font-bold text-[#faf3e3]">{state.ap}</span>
+                <span
+                  className={`tabular-nums font-bold ${
+                    state.victoryApBonusActive ? 'text-[#fde68a]' : 'text-[#faf3e3]'
+                  }`}
+                >
+                  {state.ap}/{state.turnMaxAp}
+                </span>
+                {state.victoryApBonusActive && (
+                  <span className="text-[11px] font-bold text-[#f7dc88] whitespace-nowrap">
+                    · 승전 +1
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -744,7 +1035,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                sound.playSelect();
+                sound.playClick();
                 setShowHallOfFame(true);
               }}
               aria-label="명예의 전당 보기"
@@ -757,7 +1048,10 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setShowRules(true)}
+              onClick={() => {
+                sound.playClick();
+                setShowRules(true);
+              }}
               aria-label="병법서 보기"
               title="병법서"
               className="flex h-9 w-9 items-center justify-center rounded-md border border-[#4a3f32] bg-[#312921] text-[#e8dcc4] transition-colors hover:bg-[#3f352b]"
@@ -796,9 +1090,26 @@ export default function App() {
         playerFaction={state.playerFaction}
       />
 
+      {/* Slim Lord Portrait & Speech Bubble Bar (+ Active Lu Bu Alert Badge) — Outside SVG map */}
+      <LordStatusBar
+        playerFaction={state.playerFaction}
+        lordEmotion={lordEmotion}
+        lordLine={lordLine}
+        lubuAlive={state.lubuSpawned && counts.lubu > 0}
+        lubuCityCount={counts.lubu}
+        lubuEmotion={lubuEmotion}
+      />
+
       {/* Main Playfield */}
       <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 items-start gap-4 px-3 py-3 pb-8 sm:px-5 lg:grid-cols-[minmax(0,1fr)_336px] lg:gap-5 lg:py-4">
-        <div className="w-full pb-2 sm:pb-3 lg:pb-0">
+        <div className="relative w-full pb-2 sm:pb-3 lg:pb-0">
+          {battleCutIn && (
+            <BattleCutIn
+              key={battleCutIn.id}
+              cutIn={battleCutIn}
+              onDismiss={dismissBattleCutIn}
+            />
+          )}
           <StrategyMap
             cities={state.cities}
             playerFaction={state.playerFaction}
@@ -829,9 +1140,21 @@ export default function App() {
           onToggleFireMode={handleToggleFireMode}
           onChangeMarchRatio={handleChangeMarchRatio}
           onCancelMode={handleCancelMode}
-          onEndTurn={() => void handleEndTurn()}
+          onEndTurn={handleRequestEndTurn}
         />
       </main>
+
+      {/* Remaining AP End-Turn Confirmation Modal */}
+      {showEndTurnConfirm && (
+        <EndTurnConfirmModal
+          remainingAp={state.ap}
+          onCancel={() => {
+            sound.playClick();
+            setShowEndTurnConfirm(false);
+          }}
+          onConfirm={handleConfirmEndTurn}
+        />
+      )}
 
       {/* Event Modal (3-Turn Events & Lu Bu Appearance Warning) */}
       {state.pendingEvent && (
@@ -852,7 +1175,10 @@ export default function App() {
           lubuDefeated={state.lubuDefeated}
           stats={state.stats}
           hasRegisteredHof={hasRegisteredHof}
-          onRegisteredHof={() => setHasRegisteredHof(true)}
+          onRegisteredHof={(entry) => {
+            setHasRegisteredHof(true);
+            setRecentHofEntry(entry);
+          }}
           onOpenHallOfFame={() => setShowHallOfFame(true)}
           onRestart={handleRestartSameFaction}
           onReturnLobby={handleReturnLobby}
@@ -860,7 +1186,12 @@ export default function App() {
       )}
 
       {/* Hall of Fame Modal */}
-      {showHallOfFame && <HallOfFameModal onClose={() => setShowHallOfFame(false)} />}
+      {showHallOfFame && (
+        <HallOfFameModal
+          recentEntry={recentHofEntry}
+          onClose={() => setShowHallOfFame(false)}
+        />
+      )}
 
       {/* Rules Reference Modal */}
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
