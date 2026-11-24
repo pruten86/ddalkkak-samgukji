@@ -18,8 +18,12 @@ import type { GameEventModalData, GameStats, PlayableFactionId } from '../game/t
 import { submitHallOfFameEntry, type HallOfFameEntry } from '../lib/supabase';
 import {
   downloadCertificateImage,
+  generateCertificatePreviewAsset,
+  isInAppBrowser,
+  shareCertificateFile,
   shareCertificateRecord,
   type CertificateData,
+  type CertificatePreviewAsset,
 } from '../utils/certificate';
 import { LordPortrait } from './LordPortrait';
 
@@ -218,6 +222,8 @@ export function SettlementModal({
   const [savingImg, setSavingImg] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [certPreview, setCertPreview] = useState<CertificatePreviewAsset | null>(null);
+  const [previewSharing, setPreviewSharing] = useState(false);
 
   const buildCertificateData = (): CertificateData => ({
     nickname,
@@ -272,12 +278,36 @@ export function SettlementModal({
     setSavingImg(true);
     setActionNotice(null);
     try {
-      const filename = await downloadCertificateImage(buildCertificateData());
+      const certData = buildCertificateData();
+      // In KakaoTalk and other in-app WebViews, never trigger programmatic <a download>
+      // because OS DownloadManager rejects blob:/data: URLs with "unsupported format".
+      if (isInAppBrowser()) {
+        const preview = generateCertificatePreviewAsset(certData);
+        setCertPreview(preview);
+        return;
+      }
+
+      const filename = await downloadCertificateImage(certData);
       setActionNotice(`인증서 이미지(${filename})를 저장했습니다.`);
     } catch {
       setActionNotice('이미지 저장에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setSavingImg(false);
+    }
+  };
+
+  const handleSharePreviewFile = async () => {
+    if (!certPreview?.file || previewSharing) return;
+    sound.playClick();
+    setPreviewSharing(true);
+    try {
+      const result = await shareCertificateFile(certPreview.file, buildCertificateData());
+      if (result === 'shared') {
+        setActionNotice('천하통일 인증서를 공유했습니다!');
+      }
+      // 'cancelled' (AbortError) is intentionally ignored without showing an error
+    } finally {
+      setPreviewSharing(false);
     }
   };
 
@@ -531,6 +561,94 @@ export function SettlementModal({
           </button>
         </div>
       </div>
+
+      {/* In-App Browser Certificate Preview Modal (KakaoTalk / Naver / Instagram / Line / FB) */}
+      {certPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cert-preview-title"
+          data-testid="certificate-preview-modal"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-3 sm:p-4"
+        >
+          <div className="flex max-h-[94dvh] w-full max-w-md flex-col overflow-hidden rounded-lg border-2 border-[#b49b6c] bg-[#faf3e3] shadow-2xl">
+            {/* Top Header */}
+            <div className="flex items-center justify-between gap-2 border-b border-[#dfd0b3] bg-[#f2e6ce] px-4 py-3">
+              <h3
+                id="cert-preview-title"
+                className="font-display text-base font-black text-[#1f1a14]"
+              >
+                천하통일 인증서 미리보기
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  sound.playClick();
+                  setCertPreview(null);
+                }}
+                aria-label="인증서 미리보기 닫기"
+                data-testid="btn-close-cert-preview-x"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[#5c4f3d] hover:bg-[#e4d5b6]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Clear Long-Press Save Instruction Banner */}
+            <div
+              data-testid="cert-preview-guide-banner"
+              className="border-b border-[#dcc48c] bg-[#f7e9c2] px-4 py-2.5 text-center text-xs font-bold leading-snug text-[#5c3d0c]"
+            >
+              카카오톡에서는 아래 이미지를 꾹(1초 이상) 눌러 「이미지 저장」을 선택해 주세요!
+            </div>
+
+            {/* Unobstructed PNG Image Area — Topmost Touch Target for Long-Press Save */}
+            <div className="flex-1 overflow-y-auto bg-[#efe4cc]/65 p-3">
+              <img
+                src={certPreview.dataUrl}
+                alt="딸깍 삼국지 천하통일 인증서"
+                data-testid="cert-preview-img"
+                className="cert-preview-img relative z-10 pointer-events-auto block h-auto w-full rounded-md border border-[#c6b18b] shadow-md"
+              />
+            </div>
+
+            {/* Bottom Actions & Helper Notice */}
+            <div className="space-y-2 border-t border-[#dfd0b3] bg-[#f3e8d2] px-4 py-3">
+              <div className="flex items-center justify-end gap-2">
+                {certPreview.canNativeShareFile && certPreview.file && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSharePreviewFile()}
+                    disabled={previewSharing}
+                    data-testid="btn-cert-preview-share"
+                    className="inline-flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-md bg-[#9a7222] px-3.5 py-2 text-xs font-bold text-[#faf4e6] hover:brightness-110 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>{previewSharing ? '공유 중...' : '공유 / 사진에 저장'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setCertPreview(null);
+                  }}
+                  data-testid="btn-close-cert-preview"
+                  className={`min-h-[42px] shrink-0 rounded-md bg-[#231f1a] px-5 py-2 text-xs font-bold text-[#faf4e6] hover:bg-[#383128] whitespace-nowrap ${
+                    certPreview.canNativeShareFile && certPreview.file ? '' : 'w-full'
+                  }`}
+                >
+                  닫기
+                </button>
+              </div>
+              <p className="text-center text-[11px] leading-snug text-[#6a5b46]">
+                저장 메뉴가 안 뜰 경우 화면을 캡처하거나 우측 상단(⋮) → &apos;다른 브라우저로
+                열기&apos;를 이용해 주세요.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

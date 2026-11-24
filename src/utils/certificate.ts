@@ -365,6 +365,66 @@ export function generateCertificateCanvas(data: CertificateData): HTMLCanvasElem
   return canvas;
 }
 
+const IN_APP_BROWSER_REGEX =
+  /KAKAOTALK|NAVER|Instagram|\bLine\b|FBAN|FBAV|FB_IAB|DaumApps|MicroMessenger/i;
+
+/**
+ * Detects KakaoTalk, Naver, Instagram, Line, Facebook, and similar in-app WebViews
+ * where programmatic `<a download>` on `blob:`/`data:` URLs fails with "unsupported format".
+ */
+export function isInAppBrowser(userAgent?: string): boolean {
+  const ua =
+    typeof userAgent === 'string'
+      ? userAgent
+      : typeof navigator !== 'undefined' && typeof navigator.userAgent === 'string'
+        ? navigator.userAgent
+        : '';
+  if (!ua) return false;
+  return IN_APP_BROWSER_REGEX.test(ua);
+}
+
+export interface CertificatePreviewAsset {
+  dataUrl: string;
+  filename: string;
+  file: File | null;
+  canNativeShareFile: boolean;
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const base64 = dataUrl.split(',')[1] ?? '';
+  const byteStr = atob(base64);
+  const arr = new Uint8Array(byteStr.length);
+  for (let i = 0; i < byteStr.length; i++) {
+    arr[i] = byteStr.charCodeAt(i);
+  }
+  return new Blob([arr], { type: 'image/png' });
+}
+
+function createPngFileSafe(blob: Blob, filename: string): File | null {
+  if (typeof File === 'undefined') return null;
+  try {
+    return new File([blob], filename, { type: 'image/png' });
+  } catch {
+    return null;
+  }
+}
+
+export function canSharePngFile(file: File | null): boolean {
+  if (!file || typeof navigator === 'undefined') return false;
+  if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') {
+    return false;
+  }
+  try {
+    return Boolean(navigator.canShare({ files: [file] }));
+  } catch {
+    return false;
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
 export function generateCertificateBlob(data: CertificateData): Promise<Blob> {
   const canvas = generateCertificateCanvas(data);
   return new Promise<Blob>((resolve, reject) => {
@@ -374,18 +434,32 @@ export function generateCertificateBlob(data: CertificateData): Promise<Blob> {
         return;
       }
       try {
-        const dataUrl = canvas.toDataURL('image/png');
-        const byteStr = atob(dataUrl.split(',')[1]);
-        const arr = new Uint8Array(byteStr.length);
-        for (let i = 0; i < byteStr.length; i++) {
-          arr[i] = byteStr.charCodeAt(i);
-        }
-        resolve(new Blob([arr], { type: 'image/png' }));
+        resolve(dataUrlToBlob(canvas.toDataURL('image/png')));
       } catch (err) {
         reject(err instanceof Error ? err : new Error('이미지 생성에 실패했습니다.'));
       }
     }, 'image/png');
   });
+}
+
+/**
+ * Generates an inline `data:image/png;base64,...` image and optional `File`
+ * for the long-press preview modal in KakaoTalk / in-app browsers.
+ */
+export function generateCertificatePreviewAsset(data: CertificateData): CertificatePreviewAsset {
+  const canvas = generateCertificateCanvas(data);
+  const dataUrl = canvas.toDataURL('image/png');
+  const filename = getCertificateFilename(data.nickname);
+  const blob = dataUrlToBlob(dataUrl);
+  const file = createPngFileSafe(blob, filename);
+  const canNativeShareFile = canSharePngFile(file);
+
+  return {
+    dataUrl,
+    filename,
+    file,
+    canNativeShareFile,
+  };
 }
 
 export async function downloadCertificateImage(data: CertificateData): Promise<string> {
@@ -401,6 +475,28 @@ export async function downloadCertificateImage(data: CertificateData): Promise<s
   document.body.removeChild(link);
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   return filename;
+}
+
+export async function shareCertificateFile(
+  file: File,
+  data: CertificateData
+): Promise<'shared' | 'cancelled' | 'unsupported'> {
+  if (!canSharePngFile(file)) {
+    return 'unsupported';
+  }
+  try {
+    await navigator.share({
+      title: '딸깍 삼국지 — 5분만에 천하통일',
+      text: formatShareText(data),
+      files: [file],
+    });
+    return 'shared';
+  } catch (err) {
+    if (isAbortError(err)) {
+      return 'cancelled';
+    }
+    return 'unsupported';
+  }
 }
 
 async function copyTextToClipboard(text: string): Promise<void> {
@@ -431,12 +527,13 @@ export async function shareCertificateRecord(
   const title = '딸깍 삼국지 — 5분만에 천하통일';
 
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-    try {
-      const filename = getCertificateFilename(data.nickname);
+    // Step 1: Attempt PNG file share ONLY if navigator.canShare({ files: [pngFile] }) explicitly confirms support
+    if (typeof navigator.canShare === 'function') {
       try {
+        const filename = getCertificateFilename(data.nickname);
         const blob = await generateCertificateBlob(data);
-        const file = new File([blob], filename, { type: 'image/png' });
-        if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+        const file = createPngFileSafe(blob, filename);
+        if (canSharePngFile(file) && file) {
           await navigator.share({
             title,
             text: shareText,
@@ -446,12 +543,15 @@ export async function shareCertificateRecord(
           return 'shared';
         }
       } catch (fileErr) {
-        if (fileErr instanceof Error && fileErr.name === 'AbortError') {
+        if (isAbortError(fileErr)) {
           return 'cancelled';
         }
-        // Retry without files below if file sharing isn't supported
+        // Gracefully fall through to text share if file sharing fails in WebView
       }
+    }
 
+    // Step 2: Text-only Web Share fallback
+    try {
       await navigator.share({
         title,
         text: shareText,
@@ -459,13 +559,14 @@ export async function shareCertificateRecord(
       });
       return 'shared';
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (isAbortError(err)) {
         return 'cancelled';
       }
       // Fall back to clipboard copy on unsupported / restricted environments
     }
   }
 
+  // Step 3: Clipboard fallback
   await copyTextToClipboard(shareText);
   return 'copied';
 }

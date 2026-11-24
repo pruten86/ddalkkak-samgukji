@@ -341,6 +341,13 @@
   animation: lubuLightningPulse 2.2s ease-in-out infinite;
 }
 
+/* Allow native long-press "Save Image" menu inside in-app browsers (KakaoTalk, Naver, etc.) */
+.cert-preview-img {
+  -webkit-touch-callout: default;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-march-dash,
   .animate-float-up,
