@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
-  CheckCircle2,
   Crown,
+  Download,
   Flame,
   RotateCcw,
   ScrollText,
+  Share2,
   Trophy,
   X,
 } from 'lucide-react';
@@ -13,6 +14,11 @@ import { FACTIONS } from '../game/data';
 import { calculateAchievementScore, calculateVictoryRank } from '../game/engine';
 import type { GameEventModalData, GameStats, PlayableFactionId } from '../game/types';
 import { submitHallOfFameEntry } from '../lib/supabase';
+import {
+  downloadCertificateImage,
+  shareCertificateRecord,
+  type CertificateData,
+} from '../utils/certificate';
 
 interface EventModalProps {
   event: GameEventModalData;
@@ -122,6 +128,26 @@ export function SettlementModal({
   const [nickname, setNickname] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [savingImg, setSavingImg] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  const buildCertificateData = (): CertificateData => ({
+    nickname,
+    factionId: playerFaction,
+    rank: rankInfo.rank,
+    rankTitle: rankInfo.title,
+    turns: turn,
+    totalScore: scoreInfo.totalScore,
+    baseScore: scoreInfo.baseScore,
+    lubuBonus: scoreInfo.lubuBonus,
+    troopBonus: scoreInfo.troopBonus,
+    battlesWon: stats.battlesWon,
+    battlesFought: stats.battlesFought,
+    totalTroops,
+    lubuSpawned,
+    lubuDefeated,
+  });
 
   const handleSubmitHof = async (e: FormEvent) => {
     e.preventDefault();
@@ -152,23 +178,55 @@ export function SettlementModal({
     }
   };
 
+  const handleSaveCertificate = async () => {
+    if (savingImg) return;
+    setSavingImg(true);
+    setActionNotice(null);
+    try {
+      const filename = await downloadCertificateImage(buildCertificateData());
+      setActionNotice(`인증서 이미지(${filename})를 저장했습니다.`);
+    } catch {
+      setActionNotice('이미지 저장에 실패했습니다. 다시 시도해 주세요.');
+    } finally {
+      setSavingImg(false);
+    }
+  };
+
+  const handleShareRecord = async () => {
+    if (sharing) return;
+    setSharing(true);
+    setActionNotice(null);
+    try {
+      const result = await shareCertificateRecord(buildCertificateData());
+      if (result === 'copied') {
+        setActionNotice('기록이 클립보드에 복사되었습니다!');
+      } else if (result === 'shared') {
+        setActionNotice('천하통일 기록을 공유했습니다!');
+      }
+    } catch {
+      setActionNotice('기록 공유에 실패했습니다. 다시 시도해 주세요.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="settlement-modal-title"
       data-testid="settlement-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4"
     >
-      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-lg border-2 border-[#a88d5c] bg-[#faf3e3] p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between gap-4 border-b border-[#dfd0b3] pb-4">
-          <div>
+      <div className="max-h-[92dvh] w-full max-w-md overflow-x-hidden overflow-y-auto rounded-lg border-2 border-[#a88d5c] bg-[#faf3e3] p-4 shadow-2xl sm:p-6">
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#dfd0b3] pb-4">
+          <div className="min-w-0">
             <p className="text-xs font-semibold text-[#6e5d47]">
               딸깍 삼국지 · {faction.name} · 제 {turn}턴 결산
             </p>
             <h2
               id="settlement-modal-title"
-              className="mt-0.5 font-display text-2xl font-black text-[#1f1a14]"
+              className="mt-0.5 font-display text-xl font-black text-[#1f1a14] sm:text-2xl"
             >
               {isVictory ? '5분만에 천하통일!' : '세력 멸망'}
             </h2>
@@ -181,11 +239,11 @@ export function SettlementModal({
 
           {isVictory ? (
             <div
-              className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-md border-2 border-[#9e2a22] bg-[#9e2a22] text-[#faf3e3] shadow-sm"
+              className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-md border-2 border-[#9e2a22] bg-[#9e2a22] text-[#faf3e3] shadow-sm sm:h-16 sm:w-16"
               aria-label={`최종 등급 ${rankInfo.rank}`}
             >
               <span className="text-[10px] font-semibold opacity-85">등급</span>
-              <span className="font-display text-3xl font-black leading-none">
+              <span className="font-display text-2xl font-black leading-none sm:text-3xl">
                 {rankInfo.rank}
               </span>
             </div>
@@ -201,7 +259,7 @@ export function SettlementModal({
 
         {/* Final Achievement Score Banner on Victory */}
         {isVictory && (
-          <div className="mb-4 rounded-md border border-[#cbb07b] bg-[#f4e7c6] px-4 py-3">
+          <div className="mb-4 rounded-md border border-[#cbb07b] bg-[#f4e7c6] px-3.5 py-3">
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-xs font-bold text-[#6b501d]">최종 업적 점수</span>
               <span
@@ -252,20 +310,23 @@ export function SettlementModal({
 
         {/* Hall of Fame Registration Form (Victory Only, Once Per Match) */}
         {isVictory && (
-          <div className="mb-4 rounded-md border border-[#d6c5a3] bg-[#f5ecd9] p-3.5">
+          <div className="mb-3 rounded-md border border-[#d6c5a3] bg-[#f5ecd9] p-3">
             {hasRegisteredHof ? (
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#24633e]">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>명예의 전당에 기록이 등록되었습니다!</span>
-                </div>
+                <p
+                  data-testid="hof-registered-message"
+                  className="text-xs font-bold text-[#24633e]"
+                >
+                  ✅ 명예의 전당에 등록되었습니다!
+                </p>
                 <button
                   type="button"
                   onClick={onOpenHallOfFame}
-                  className="inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-md bg-[#9a7222] px-3 py-1.5 text-xs font-bold text-[#faf4e6] hover:brightness-110 whitespace-nowrap"
+                  data-testid="btn-view-hof-after-register"
+                  className="inline-flex min-h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-md bg-[#9a7222] px-3.5 py-1.5 text-xs font-bold text-[#faf4e6] hover:brightness-110 whitespace-nowrap"
                 >
                   <Trophy className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>순위 확인</span>
+                  <span>명예의 전당 보기</span>
                 </button>
               </div>
             ) : (
@@ -276,32 +337,71 @@ export function SettlementModal({
                 >
                   명예의 전당 등록 (닉네임 1~12자)
                 </label>
-                <div className="flex gap-2">
+                <div className="flex w-full items-center gap-2">
                   <input
                     id="hof-nickname-input"
                     type="text"
                     value={nickname}
                     maxLength={12}
+                    enterKeyHint="done"
                     onChange={(e) => {
                       setNickname(e.target.value);
                       if (formError) setFormError(null);
                     }}
                     placeholder="장수 닉네임 입력"
                     data-testid="hof-nickname-input"
-                    className="min-h-[40px] flex-1 rounded-md border border-[#bda884] bg-[#fffcf5] px-3 text-sm text-[#1f1a14] placeholder:text-[#9c8d77] focus:border-[#231f1a] focus:outline-none"
+                    className="min-h-[42px] min-w-0 flex-1 rounded-md border border-[#bda884] bg-[#fffcf5] px-3 text-sm text-[#1f1a14] placeholder:text-[#9c8d77] focus:border-[#231f1a] focus:outline-none"
                   />
                   <button
                     type="submit"
                     disabled={submitting}
+                    aria-label="명예의 전당 등록"
                     data-testid="btn-register-hof"
-                    className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md bg-[#9a7222] px-3.5 text-xs font-bold text-[#faf4e6] hover:brightness-110 disabled:opacity-50 whitespace-nowrap"
+                    className="inline-flex min-h-[42px] shrink-0 items-center justify-center gap-1.5 rounded-md bg-[#9a7222] px-4 text-xs font-bold text-[#faf4e6] hover:brightness-110 disabled:opacity-50 whitespace-nowrap"
                   >
                     <Trophy className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>{submitting ? '등록 중...' : '명예의 전당 등록'}</span>
+                    <span>{submitting ? '등록 중' : '등록'}</span>
                   </button>
                 </div>
                 {formError && <p className="text-xs font-medium text-[#a82921]">{formError}</p>}
               </form>
+            )}
+          </div>
+        )}
+
+        {/* Save Certificate PNG & External Share Buttons (Victory Only) */}
+        {isVictory && (
+          <div className="mb-4 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSaveCertificate()}
+                disabled={savingImg}
+                data-testid="btn-save-certificate"
+                className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-md border border-[#bfa87e] bg-[#f1e5ca] px-3 py-2 text-xs font-bold text-[#2b2217] transition-colors hover:bg-[#e6d6b2] disabled:opacity-50 whitespace-nowrap"
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>{savingImg ? '생성 중...' : '기록 이미지 저장'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleShareRecord()}
+                disabled={sharing}
+                data-testid="btn-share-record"
+                className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-md border border-[#231f1a] bg-[#2c251d] px-3 py-2 text-xs font-bold text-[#faf4e6] transition-colors hover:bg-[#3d3429] disabled:opacity-50 whitespace-nowrap"
+              >
+                <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>{sharing ? '공유 중...' : '기록 공유하기'}</span>
+              </button>
+            </div>
+            {actionNotice && (
+              <p
+                role="status"
+                data-testid="settlement-action-notice"
+                className="rounded-md border border-[#c7b38a] bg-[#f6ecd4] px-3 py-1.5 text-center text-xs font-semibold text-[#3f321e]"
+              >
+                {actionNotice}
+              </p>
             )}
           </div>
         )}
@@ -317,16 +417,16 @@ export function SettlementModal({
             type="button"
             data-start="true"
             onClick={onRestart}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 font-display text-sm font-bold text-[#faf4e6] hover:brightness-110"
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 font-display text-sm font-bold text-[#faf4e6] hover:brightness-110 whitespace-nowrap"
             style={{ backgroundColor: faction.color }}
           >
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>같은 세력으로 재도전</span>
           </button>
           <button
             type="button"
             onClick={onReturnLobby}
-            className="min-h-[44px] rounded-md border border-[#bda884] bg-[#efe4cc] px-4 py-2.5 text-sm font-semibold text-[#2b241c] hover:bg-[#e5d6b7] whitespace-nowrap"
+            className="min-h-[44px] shrink-0 rounded-md border border-[#bda884] bg-[#efe4cc] px-4 py-2.5 text-sm font-semibold text-[#2b241c] hover:bg-[#e5d6b7] whitespace-nowrap"
           >
             출정 로비로
           </button>

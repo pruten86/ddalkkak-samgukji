@@ -35,10 +35,12 @@ import type {
   PlayableFactionId,
 } from './game/types';
 
-function shouldAutoStart(): boolean {
-  if (typeof window === 'undefined') return false;
+function createBootGameState(): GameState {
+  if (typeof window === 'undefined') {
+    return createInitialGameState('shu', 'splash');
+  }
   const params = new URLSearchParams(window.location.search);
-  return params.get('autostart') === '1';
+  return createInitialGameState('shu', params.get('autostart') === '1' ? 'playing' : 'splash');
 }
 
 function uid(prefix: string): string {
@@ -48,9 +50,7 @@ function uid(prefix: string): string {
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export default function App() {
-  const [state, setState] = useState<GameState>(() =>
-    createInitialGameState('shu', shouldAutoStart() ? 'playing' : 'splash')
-  );
+  const [state, setState] = useState<GameState>(() => createBootGameState());
   const [muted, setMuted] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showHallOfFame, setShowHallOfFame] = useState(false);

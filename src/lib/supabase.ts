@@ -100,8 +100,8 @@ function writeLocalEntries(entries: HallOfFameEntry[]): void {
   }
 }
 
-function normalizeRow(raw: Record<string, unknown>): HallOfFameEntry {
-  const rankVal = (raw.rank ?? raw.grade ?? 'C') as VictoryRank;
+export function normalizeHallOfFameRow(raw: Record<string, unknown>): HallOfFameEntry {
+  const rankVal = (raw.rank_grade ?? raw.rank ?? raw.grade ?? 'C') as VictoryRank;
   return {
     id: String(raw.id ?? ''),
     nickname: String(raw.nickname ?? ''),
@@ -139,7 +139,7 @@ export async function fetchHallOfFame(
           error: error.message,
         };
       }
-      const normalized = ((data ?? []) as Record<string, unknown>[]).map(normalizeRow);
+      const normalized = ((data ?? []) as Record<string, unknown>[]).map(normalizeHallOfFameRow);
       return {
         entries: sortHallOfFameEntries(normalized),
         source: 'supabase',
@@ -181,32 +181,29 @@ export async function submitHallOfFameEntry(
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('hall_of_fame')
-        .insert([sanitized])
-        .select('*')
-        .single();
+      const { rank, ...rest } = sanitized;
+      const payloads: Record<string, unknown>[] = [
+        { ...rest, rank_grade: rank },
+        { ...rest, rank },
+        { ...rest, grade: rank },
+      ];
 
-      if (!error && data) {
-        return {
-          entry: normalizeRow(data as Record<string, unknown>),
-          source: 'supabase',
-        };
-      }
-
-      // Retry with `grade` column if the remote schema uses `grade` instead of reserved word `rank`
-      if (error && /rank|column/i.test(error.message)) {
-        const { rank, ...rest } = sanitized;
-        const retry = await supabase
+      for (const payload of payloads) {
+        const { data, error } = await supabase
           .from('hall_of_fame')
-          .insert([{ ...rest, grade: rank }])
+          .insert([payload])
           .select('*')
           .single();
-        if (!retry.error && retry.data) {
+
+        if (!error && data) {
           return {
-            entry: normalizeRow(retry.data as Record<string, unknown>),
+            entry: normalizeHallOfFameRow(data as Record<string, unknown>),
             source: 'supabase',
           };
+        }
+
+        if (!error || !/rank_grade|rank|grade|column/i.test(error.message)) {
+          break;
         }
       }
     } catch {
@@ -247,7 +244,7 @@ export function subscribeHallOfFameInserts(
         },
         (payload) => {
           if (payload.new) {
-            onInsert(normalizeRow(payload.new as Record<string, unknown>));
+            onInsert(normalizeHallOfFameRow(payload.new as Record<string, unknown>));
           }
         }
       )

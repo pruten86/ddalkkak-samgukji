@@ -257,14 +257,15 @@ export function HallOfFameModal({ onClose }: HallOfFameModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-[#dfd0b3] bg-[#f3e8d2] px-5 py-3">
-          <p className="text-[11px] text-[#6a5b46]">
+        <div className="flex items-center justify-between gap-3 border-t border-[#dfd0b3] bg-[#f3e8d2] px-4 py-3 sm:px-5">
+          <p className="min-w-0 flex-1 text-[11px] leading-snug text-[#6a5b46]">
             점수 = 기본(최대 10,000) + 여포 토벌(1,500) + 잔여 병력(최대 1,500)
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[38px] rounded-md bg-[#231f1a] px-4 py-1.5 text-xs font-bold text-[#faf4e6] hover:bg-[#383128] whitespace-nowrap"
+            data-testid="btn-footer-close-hof"
+            className="min-h-[38px] shrink-0 rounded-md bg-[#231f1a] px-4 py-1.5 text-xs font-bold text-[#faf4e6] hover:bg-[#383128] whitespace-nowrap"
           >
             닫기
           </button>
