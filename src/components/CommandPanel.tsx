@@ -1,6 +1,12 @@
 import { Flame, Shield, Swords, Users } from 'lucide-react';
 import { FACTIONS, MIN_GARRISON_TROOPS } from '../game/data';
-import { getRecruitAmount, getSendTroops } from '../game/engine';
+import {
+  canUseFireAttack,
+  getFireApCost,
+  getFireLossRate,
+  getRecruitAmount,
+  getSendTroops,
+} from '../game/engine';
 import type {
   ChronicleEntry,
   CityId,
@@ -18,8 +24,9 @@ interface CommandPanelProps {
   ap: number;
   commandMode: CommandMode;
   marchRatio: MarchRatio;
-  fireUsedThisTurn: boolean;
-  fireEnhancedThisTurn: boolean;
+  fireUsesThisTurn: number;
+  maxFireUsesThisTurn: number;
+  fireBonusRateThisTurn: number;
   isAiTurn: boolean;
   activeAiFaction: FactionId | null;
   chronicle: ChronicleEntry[];
@@ -44,8 +51,9 @@ export function CommandPanel({
   ap,
   commandMode,
   marchRatio,
-  fireUsedThisTurn,
-  fireEnhancedThisTurn,
+  fireUsesThisTurn,
+  maxFireUsesThisTurn,
+  fireBonusRateThisTurn,
   isAiTurn,
   activeAiFaction,
   chronicle,
@@ -68,7 +76,15 @@ export function CommandPanel({
     selectedCity && isPlayerCity
       ? selectedCity.adjacent.some((adjId) => cities[adjId].owner !== playerFaction)
       : false;
-  const canFire = canAct && !fireUsedThisTurn && hasAdjacentEnemy;
+  const fireCost = getFireApCost(playerFaction, fireUsesThisTurn);
+  const remainingFireUses = Math.max(0, maxFireUsesThisTurn - fireUsesThisTurn);
+  const fireLossPct = Math.round(getFireLossRate(playerFaction, fireBonusRateThisTurn) * 100);
+  const isFreeFireAvailable = remainingFireUses > 0 && fireCost === 0;
+  const canFire =
+    !isAiTurn &&
+    isPlayerCity &&
+    hasAdjacentEnemy &&
+    canUseFireAttack(playerFaction, ap, fireUsesThisTurn, maxFireUsesThisTurn);
 
   const selectedFactionInfo = selectedCity ? FACTIONS[selectedCity.owner] : null;
 
@@ -127,7 +143,9 @@ export function CommandPanel({
           <span className="font-medium">
             {commandMode === 'march'
               ? `지도에서 출진·수송할 인접 성지를 선택하세요 (${sendPreview}명 파병)`
-              : `지도에서 화공을 펼칠 인접 적 성지를 선택하세요 (-${fireEnhancedThisTurn ? '50%' : '35%'})`}
+              : `지도에서 화공을 펼칠 인접 적 성지를 선택하세요 (${fireCost} AP · -${fireLossPct}%${
+                  maxFireUsesThisTurn > 1 ? ` · ${remainingFireUses}회 남음` : ''
+                })`}
           </span>
           <button
             type="button"
@@ -187,10 +205,12 @@ export function CommandPanel({
           disabled={!canFire}
           aria-pressed={commandMode === 'fire'}
           data-testid="cmd-fire"
-          className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a] ${
+          className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-2 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#231f1a] ${
             commandMode === 'fire'
               ? 'border-[#b5382a] bg-[#b5382a] text-white'
-              : 'border-[#bda884] bg-[#f3ead6] text-[#1f1a14] hover:bg-[#e8dcc2]'
+              : isFreeFireAvailable && canFire
+                ? 'border-[#c94a16] bg-[#fbeee3] text-[#1f1a14] hover:bg-[#f6e0ce]'
+                : 'border-[#bda884] bg-[#f3ead6] text-[#1f1a14] hover:bg-[#e8dcc2]'
           }`}
         >
           <Flame
@@ -199,13 +219,20 @@ export function CommandPanel({
           />
           <span className="text-xs font-bold whitespace-nowrap">화공</span>
           <span
-            className={`tabular-nums text-[11px] font-medium whitespace-nowrap ${
-              commandMode === 'fire' ? 'text-white/90' : 'text-[#5c4f3d]'
+            data-testid="cmd-fire-meta"
+            className={`tabular-nums text-[10.5px] font-medium leading-tight ${
+              commandMode === 'fire'
+                ? 'text-white/95'
+                : isFreeFireAvailable && canFire
+                  ? 'font-bold text-[#9e2a22]'
+                  : 'text-[#5c4f3d]'
             }`}
           >
-            {fireUsedThisTurn
+            {remainingFireUses <= 0
               ? '사용 완료'
-              : `-${fireEnhancedThisTurn ? '50%' : '35%'} · 1AP`}
+              : `${fireCost} AP · -${fireLossPct}%${
+                  maxFireUsesThisTurn > 1 ? ` (${remainingFireUses}회 남음)` : ''
+                }`}
           </span>
         </button>
       </div>

@@ -14,9 +14,10 @@ import { LobbyScreen } from './components/LobbyScreen';
 import { LordStatusBar } from './components/LordStatusBar';
 import { SplashScreen } from './components/SplashScreen';
 import { StrategyMap } from './components/StrategyMap';
-import { FACTIONS, MAX_AP, PLAYABLE_FACTIONS } from './game/data';
+import { BASE_MAX_FIRE_USES, FACTIONS, MAX_AP, PLAYABLE_FACTIONS } from './game/data';
 import {
   applyEndOfRoundGrowth,
+  canUseFireAttack,
   checkLuBuAppearance,
   checkOutcome,
   countTerritories,
@@ -26,6 +27,8 @@ import {
   executeMarchOrTransport,
   executeRecruit,
   formatEliminationRewardMessage,
+  getFireApCost,
+  getFireLossRate,
   getOwnedCities,
   hasDefeatedLuBu,
   isMajorEliminationReward,
@@ -515,28 +518,35 @@ export default function App() {
         return;
       }
 
-      // Execute Fire Attack if in fire mode & clicking adjacent enemy
+      // Execute Fire Attack if in fire mode & clicking adjacent enemy (Wu 1st fire costs 0 AP!)
       if (
         cur.commandMode === 'fire' &&
         selected &&
         selected.owner === cur.playerFaction &&
         selected.adjacent.includes(targetId) &&
         target.owner !== cur.playerFaction &&
-        cur.ap > 0 &&
-        !cur.fireUsedThisTurn
+        canUseFireAttack(
+          cur.playerFaction,
+          cur.ap,
+          cur.fireUsesThisTurn,
+          cur.maxFireUsesThisTurn
+        )
       ) {
+        const fireCost = getFireApCost(cur.playerFaction, cur.fireUsesThisTurn);
         const res = executeFireAttack(
           cur.cities,
           selected.id,
           targetId,
-          cur.fireEnhancedThisTurn
+          cur.fireBonusRateThisTurn
         );
         if (!res) return;
 
+        const lossPct = Math.round(res.lossRate * 100);
+        const costTag = fireCost === 0 ? '무료 0 AP' : '1 AP';
         sound.playFire();
         triggerShake();
         spawnBurst(targetId, 'fire', `화공 -${res.troopsLost}`, '#d9480f', 1200);
-        triggerLordReaction('fire', 'fire', 1500);
+        triggerLordReaction('fire', 'fire', 1600);
         showBattleCutIn({
           kind: 'fire',
           cityName: target.name,
@@ -545,13 +555,13 @@ export default function App() {
           attackerEmotion: 'fire',
           defenderEmotion: 'defeat',
           headline: `🔥 ${target.name} 화공 적중!`,
-          subline: `적 병력 -${res.troopsLost}명 소멸`,
+          subline: `적 병력 -${res.troopsLost}명 소멸 (-${lossPct}% · ${costTag})`,
         });
 
         const logEntry: ChronicleEntry = {
           id: uid('log'),
           turn: cur.turn,
-          text: `${selected.name}에서 ${target.name}에 화공을 펼쳐 적 병력 ${res.troopsLost}명을 소멸시켰습니다!`,
+          text: `${selected.name}에서 ${target.name}에 화공(${costTag}, -${lossPct}%)을 펼쳐 적 병력 ${res.troopsLost}명을 소멸시켰습니다!`,
           faction: cur.playerFaction,
           highlight: 'battle',
         };
@@ -559,8 +569,8 @@ export default function App() {
         setState((prev) => ({
           ...prev,
           cities: res.cities,
-          ap: prev.ap - 1,
-          fireUsedThisTurn: true,
+          ap: prev.ap - fireCost,
+          fireUsesThisTurn: prev.fireUsesThisTurn + 1,
           commandMode: 'idle',
           chronicle: [logEntry, ...prev.chronicle].slice(0, 30),
           stats: {
@@ -733,7 +743,8 @@ export default function App() {
     let nextLubuSpawned = startSnap.lubuSpawned;
     let nextLubuTarget = startSnap.lubuTargetFaction;
     let pendingEvent = null;
-    let nextEnhanceFire = false;
+    let nextMaxFireUses = BASE_MAX_FIRE_USES;
+    let nextFireBonusRate = 0;
     let eventBonusAp = 0;
     const turnStartLogs: ChronicleEntry[] = [];
 
@@ -767,7 +778,8 @@ export default function App() {
       const ev = triggerThreeTurnEvent(workingCities, playerFaction);
       workingCities = ev.cities;
       pendingEvent = ev.eventModal;
-      nextEnhanceFire = ev.enhanceFireThisTurn;
+      nextMaxFireUses = ev.maxFireUsesThisTurn;
+      nextFireBonusRate = ev.fireBonusRateThisTurn;
       eventBonusAp = ev.bonusAp;
 
       if (ev.eventModal.type === 'southeast_wind') {
@@ -813,8 +825,9 @@ export default function App() {
       turnMaxAp: apRoll.turnMaxAp,
       nextTurnBonusAp: apRoll.nextTurnBonusAp,
       victoryApBonusActive: apRoll.victoryApBonusActive,
-      fireUsedThisTurn: false,
-      fireEnhancedThisTurn: nextEnhanceFire,
+      fireUsesThisTurn: 0,
+      maxFireUsesThisTurn: nextMaxFireUses,
+      fireBonusRateThisTurn: nextFireBonusRate,
       cities: workingCities,
       selectedCityId: nextSelected,
       lubuSpawned: nextLubuSpawned,
@@ -906,6 +919,13 @@ export default function App() {
     () => countTotalTroops(state.cities, state.playerFaction),
     [state.cities, state.playerFaction]
   );
+  const remainingFireUses = Math.max(0, state.maxFireUsesThisTurn - state.fireUsesThisTurn);
+  const fireLossPct = Math.round(
+    getFireLossRate(state.playerFaction, state.fireBonusRateThisTurn) * 100
+  );
+  const freeFireReady =
+    remainingFireUses > 0 && getFireApCost(state.playerFaction, state.fireUsesThisTurn) === 0;
+  const southeastWindActive = state.maxFireUsesThisTurn > BASE_MAX_FIRE_USES;
 
   // Stage 1: Full-screen Splash Screen
   if (state.phase === 'splash') {
@@ -1098,6 +1118,10 @@ export default function App() {
         lubuAlive={state.lubuSpawned && counts.lubu > 0}
         lubuCityCount={counts.lubu}
         lubuEmotion={lubuEmotion}
+        freeFireReady={freeFireReady}
+        southeastWindActive={southeastWindActive}
+        remainingFireUses={remainingFireUses}
+        fireLossPct={fireLossPct}
       />
 
       {/* Main Playfield */}
@@ -1130,8 +1154,9 @@ export default function App() {
           ap={state.ap}
           commandMode={state.commandMode}
           marchRatio={state.marchRatio}
-          fireUsedThisTurn={state.fireUsedThisTurn}
-          fireEnhancedThisTurn={state.fireEnhancedThisTurn}
+          fireUsesThisTurn={state.fireUsesThisTurn}
+          maxFireUsesThisTurn={state.maxFireUsesThisTurn}
+          fireBonusRateThisTurn={state.fireBonusRateThisTurn}
           isAiTurn={state.isAiTurn}
           activeAiFaction={state.activeAiFaction}
           chronicle={state.chronicle}

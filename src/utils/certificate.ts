@@ -1,4 +1,4 @@
-import { FACTIONS } from '../game/data';
+import { FACTIONS, VICTORY_RANK_STYLES } from '../game/data';
 import type { PlayableFactionId, VictoryRank } from '../game/types';
 
 export const SHARE_URL = 'https://dalkak3k.vercel.app';
@@ -200,29 +200,39 @@ export function generateCertificateCanvas(data: CertificateData): HTMLCanvasElem
   ctx.font = `600 22px ${sansFont}`;
   ctx.fillText('5분만에 천하통일', sealX + 350, sealY + 72);
 
-  // Top-right Red Cinnabar Rank Stamp (도장)
+  // Top-right Rank Seal Stamp (도장) — 7-tier SS~E styling
+  const rankStyle = VICTORY_RANK_STYLES[data.rank] ?? VICTORY_RANK_STYLES.C;
   ctx.save();
   ctx.translate(width - 178, 174);
   ctx.rotate(0.06);
   drawRoundedRect(ctx, -74, -74, 148, 148, 16);
-  ctx.fillStyle = '#a3261d';
+  if (rankStyle.canvasFillEnd) {
+    const stampGrad = ctx.createLinearGradient(-74, -74, 74, 74);
+    stampGrad.addColorStop(0, rankStyle.canvasFillStart);
+    stampGrad.addColorStop(0.5, '#b8291d');
+    stampGrad.addColorStop(1, rankStyle.canvasFillEnd);
+    ctx.fillStyle = stampGrad;
+  } else {
+    ctx.fillStyle = rankStyle.canvasFillStart;
+  }
   ctx.fill();
-  ctx.strokeStyle = '#6c1610';
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = rankStyle.canvasBorder;
+  ctx.lineWidth = rankStyle.isTopTier ? 5 : 4;
   ctx.stroke();
 
   drawRoundedRect(ctx, -62, -62, 124, 124, 10);
-  ctx.strokeStyle = 'rgba(250, 243, 227, 0.78)';
-  ctx.lineWidth = 2.4;
+  ctx.strokeStyle = rankStyle.canvasInnerBorder;
+  ctx.lineWidth = rankStyle.isTopTier ? 2.8 : 2.4;
   ctx.stroke();
 
-  ctx.fillStyle = '#faf3e3';
+  ctx.fillStyle = rankStyle.canvasText;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `700 20px ${sansFont}`;
   ctx.fillText('통일 등급', 0, -34);
 
-  ctx.font = `900 72px ${serifFont}`;
+  const rankFontSize = data.rank.length >= 2 ? 58 : 72;
+  ctx.font = `900 ${rankFontSize}px ${serifFont}`;
   ctx.fillText(data.rank, 0, 20);
   ctx.restore();
 

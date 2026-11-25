@@ -108,6 +108,119 @@
   }
 }
 
+@keyframes splashBreathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.018);
+  }
+}
+
+@keyframes splashCitadelRipple {
+  0% {
+    opacity: 0;
+    transform: scale(0.28);
+  }
+  14% {
+    opacity: 0.92;
+  }
+  68% {
+    opacity: 0.28;
+    transform: scale(1.42);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.72);
+  }
+}
+
+@keyframes splashCitadelImpact {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  10% {
+    opacity: 0.95;
+    transform: scale(1.08);
+  }
+  32% {
+    opacity: 0.22;
+    transform: scale(1.22);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+}
+
+@keyframes splashSparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0.25) rotate(-18deg);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.12) rotate(0deg);
+  }
+  44% {
+    opacity: 0.85;
+    transform: scale(0.92) rotate(12deg);
+  }
+  68% {
+    opacity: 0;
+    transform: scale(0.3) rotate(24deg);
+  }
+}
+
+@keyframes splashEmberFloat {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.55);
+  }
+  16% {
+    opacity: var(--ember-opacity, 0.72);
+  }
+  55% {
+    opacity: var(--ember-opacity, 0.72);
+    transform: translate3d(var(--ember-drift, 12px), calc(var(--ember-rise, -150px) * 0.55), 0) scale(1);
+  }
+  84% {
+    opacity: calc(var(--ember-opacity, 0.72) * 0.65);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--ember-drift, 12px) * -0.45), var(--ember-rise, -150px), 0) scale(0.4);
+  }
+}
+
+@keyframes splashCtaGlow {
+  0%, 100% {
+    box-shadow:
+      0 6px 18px rgba(24, 15, 6, 0.45),
+      0 0 12px rgba(243, 206, 102, 0.34),
+      inset 0 1px 0 rgba(255, 245, 208, 0.32);
+  }
+  50% {
+    box-shadow:
+      0 8px 24px rgba(24, 15, 6, 0.52),
+      0 0 26px rgba(250, 212, 104, 0.72),
+      0 0 42px rgba(236, 178, 56, 0.34),
+      inset 0 1px 0 rgba(255, 248, 222, 0.62);
+  }
+}
+
+@keyframes splashMobileGlow {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.04);
+  }
+}
+
 .animate-march-dash {
   animation: marchDash 0.48s linear infinite;
 }
@@ -134,6 +247,48 @@
 
 .animate-splash-pulse {
   animation: splashPulse 2.1s ease-in-out infinite;
+}
+
+.animate-splash-breathe {
+  animation: splashBreathe 8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-splash-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: splashCitadelRipple 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.animate-splash-ripple-delayed {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: splashCitadelRipple 2.2s cubic-bezier(0.16, 1, 0.3, 1) 0.34s infinite;
+}
+
+.animate-splash-impact {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: splashCitadelImpact 2.2s ease-out infinite;
+}
+
+.animate-splash-sparkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: splashSparkle 2.2s ease-in-out infinite;
+}
+
+.animate-splash-ember {
+  animation: splashEmberFloat var(--ember-duration, 7s) ease-in-out var(--ember-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+.animate-splash-cta-glow {
+  animation: splashCtaGlow 2.4s ease-in-out infinite;
+}
+
+.animate-splash-mobile-glow {
+  animation: splashMobileGlow 2.4s ease-in-out infinite;
 }
 
 /* Reusable LordPortrait emotion keyframes */
@@ -355,6 +510,14 @@
   .animate-ring-pulse,
   .animate-map-shake,
   .animate-splash-pulse,
+  .animate-splash-breathe,
+  .animate-splash-ripple,
+  .animate-splash-ripple-delayed,
+  .animate-splash-impact,
+  .animate-splash-sparkle,
+  .animate-splash-ember,
+  .animate-splash-cta-glow,
+  .animate-splash-mobile-glow,
   .portrait-anim-idle,
   .portrait-anim-attack,
   .portrait-anim-defend,
@@ -368,5 +531,21 @@
   .battle-cutin-enter,
   .lubu-lightning-pulse {
     animation: none !important;
+  }
+
+  .animate-splash-ripple,
+  .animate-splash-ripple-delayed,
+  .animate-splash-impact,
+  .animate-splash-sparkle,
+  .animate-splash-ember,
+  .animate-splash-mobile-glow {
+    opacity: 0 !important;
+  }
+
+  .animate-splash-cta-glow {
+    box-shadow:
+      0 6px 18px rgba(24, 15, 6, 0.45),
+      0 0 14px rgba(243, 206, 102, 0.42),
+      inset 0 1px 0 rgba(255, 245, 208, 0.35);
   }
 }

@@ -22,7 +22,7 @@ export type CommandMode = 'idle' | 'march' | 'fire';
 export type MarchRatio = 0.5 | 0.8 | 0.95;
 export type ForecastLevel = '우세' | '박빙' | '열세';
 export type GamePhase = 'splash' | 'lobby' | 'playing' | 'victory' | 'defeat';
-export type VictoryRank = 'S' | 'A' | 'B' | 'C';
+export type VictoryRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E';
 
 export interface AchievementScoreBreakdown {
   baseScore: number;
@@ -143,8 +143,9 @@ export interface GameState {
   turnMaxAp: number;
   nextTurnBonusAp: number;
   victoryApBonusActive: boolean;
-  fireUsedThisTurn: boolean;
-  fireEnhancedThisTurn: boolean;
+  fireUsesThisTurn: number;
+  maxFireUsesThisTurn: number;
+  fireBonusRateThisTurn: number;
   cities: Record<CityId, CityState>;
   selectedCityId: CityId | null;
   commandMode: CommandMode;

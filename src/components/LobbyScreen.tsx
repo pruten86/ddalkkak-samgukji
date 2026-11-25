@@ -1,5 +1,5 @@
 import { ArrowLeft, Trophy } from 'lucide-react';
-import { FACTIONS } from '../game/data';
+import { FACTIONS, VICTORY_RANK_GUIDE_TEXT } from '../game/data';
 import type { PlayableFactionId } from '../game/types';
 import { LordPortrait } from './LordPortrait';
 
@@ -163,10 +163,13 @@ export function LobbyScreen({
                             />
                           </div>
                           <p
-                            className="mt-0.5 text-xs font-semibold whitespace-nowrap"
+                            className="mt-0.5 text-xs font-bold leading-snug"
                             style={{ color: f.darkColor }}
                           >
-                            [{f.traitName}] {f.traitSummary}
+                            [{f.traitName}]
+                          </p>
+                          <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#4e4234]">
+                            {f.traitSummary}
                           </p>
                         </div>
                       </div>
@@ -226,8 +229,8 @@ export function LobbyScreen({
               <span aria-hidden="true">→</span>
             </button>
 
-            <span className="text-xs text-[#645746]">
-              등급 기준: 20턴 이하 S · 21~30턴 A · 31~40턴 B · 41턴 이상 C
+            <span className="text-xs leading-snug text-[#645746]">
+              {VICTORY_RANK_GUIDE_TEXT}
             </span>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Flame, Medal, Trophy, X } from 'lucide-react';
-import { FACTIONS } from '../game/data';
+import { FACTIONS, VICTORY_RANK_STYLES } from '../game/data';
 import { sound } from '../game/sound';
 import type { PlayableFactionId } from '../game/types';
 import {
@@ -26,11 +26,114 @@ const FILTER_TABS: Array<{ id: FilterTab; label: string }> = [
   { id: 'wu', label: '오(손권)' },
 ];
 
-function getRankMedalStyle(position: number): { color: string; bg: string; label: string } | null {
-  if (position === 1) return { color: '#7a5607', bg: '#f5df98', label: '1위' };
-  if (position === 2) return { color: '#47515c', bg: '#e2e6eb', label: '2위' };
-  if (position === 3) return { color: '#75411c', bg: '#efd2ba', label: '3위' };
+type TopTierNumber = 1 | 2 | 3;
+
+interface TopRankTierStyle {
+  tier: TopTierNumber;
+  title: string;
+  label: string;
+  crownFill: string;
+  crownStroke: string;
+  crownJewel: string;
+  rankBg: string;
+  rankBorder: string;
+  rankText: string;
+  titleBg: string;
+  titleBorder: string;
+  titleText: string;
+  rowBgClass: string;
+}
+
+function getTopRankTier(position: number): TopRankTierStyle | null {
+  if (position === 1) {
+    return {
+      tier: 1,
+      title: '황제',
+      label: '1위 황제',
+      crownFill: '#f6d260',
+      crownStroke: '#966608',
+      crownJewel: '#c12c1d',
+      rankBg: 'linear-gradient(135deg, #fce9a7 0%, #eac04e 100%)',
+      rankBorder: '#b88314',
+      rankText: '#5e3c02',
+      titleBg: '#fcf0c7',
+      titleBorder: '#cfa032',
+      titleText: '#6c4704',
+      rowBgClass: 'bg-[#fbf1d3]/85',
+    };
+  }
+  if (position === 2) {
+    return {
+      tier: 2,
+      title: '왕',
+      label: '2위 왕',
+      crownFill: '#dfe6ee',
+      crownStroke: '#52606f',
+      crownJewel: '#356899',
+      rankBg: 'linear-gradient(135deg, #f2f5f8 0%, #d3dce6 100%)',
+      rankBorder: '#7c8b9c',
+      rankText: '#2f3a46',
+      titleBg: '#edf1f5',
+      titleBorder: '#97a6b8',
+      titleText: '#35414f',
+      rowBgClass: 'bg-[#f1f4f7]/80',
+    };
+  }
+  if (position === 3) {
+    return {
+      tier: 3,
+      title: '제후',
+      label: '3위 제후',
+      crownFill: '#e4a778',
+      crownStroke: '#7d4016',
+      crownJewel: '#9d4c14',
+      rankBg: 'linear-gradient(135deg, #f4d9c2 0%, #d99f71 100%)',
+      rankBorder: '#9e5725',
+      rankText: '#592c0d',
+      titleBg: '#f6e2d1',
+      titleBorder: '#c27b48',
+      titleText: '#693412',
+      rowBgClass: 'bg-[#f7eae0]/80',
+    };
+  }
   return null;
+}
+
+function RankCrownIcon({
+  tierStyle,
+  className = 'h-3.5 w-3.5 shrink-0',
+}: {
+  tierStyle: TopRankTierStyle;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M3 17.5L4.8 8.5L9.2 12.2L12 5.5L14.8 12.2L19.2 8.5L21 17.5H3Z"
+        fill={tierStyle.crownFill}
+        stroke={tierStyle.crownStroke}
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="3.5"
+        y="17.5"
+        width="17"
+        height="2.8"
+        rx="1.2"
+        fill={tierStyle.crownFill}
+        stroke={tierStyle.crownStroke}
+        strokeWidth="1.5"
+      />
+      <circle cx="12" cy="14" r="1.4" fill={tierStyle.crownJewel} />
+      <circle cx="12" cy="4.4" r="1.3" fill={tierStyle.crownFill} stroke={tierStyle.crownStroke} strokeWidth="1" />
+    </svg>
+  );
 }
 
 function mergeRecentEntry(
@@ -209,41 +312,71 @@ export function HallOfFameModal({ onClose, recentEntry }: HallOfFameModalProps) 
               >
                 {entries.map((entry, idx) => {
                   const pos = idx + 1;
-                  const medal = getRankMedalStyle(pos);
+                  const topTier = getTopRankTier(pos);
+                  const rankStyle = VICTORY_RANK_STYLES[entry.rank] ?? VICTORY_RANK_STYLES.C;
                   const factionInfo = FACTIONS[entry.faction];
-                  const formattedDateTime = formatHallOfFameDateTime(entry.created_at);
+                  const formattedDate = formatHallOfFameDateTime(entry.created_at);
 
                   return (
                     <li
                       key={entry.id}
                       data-testid={`hof-mobile-row-${pos}`}
-                      className={`flex items-start justify-between gap-2.5 py-2.5 px-1.5 ${
-                        pos <= 3 ? 'rounded-sm bg-[#f6ecd4]/75' : ''
+                      className={`flex items-start justify-between gap-2 py-2.5 px-1.5 ${
+                        topTier ? `rounded-sm ${topTier.rowBgClass}` : ''
                       }`}
                     >
-                      {/* Left: Rank Badge */}
+                      {/* Left: Rank Badge / Crown */}
                       <div className="mt-0.5 shrink-0">
-                        {medal ? (
+                        {topTier ? (
                           <span
-                            className="inline-flex h-6 min-w-[28px] items-center justify-center rounded px-1.5 font-display text-xs font-black tabular-nums"
-                            style={{ backgroundColor: medal.bg, color: medal.color }}
+                            aria-label={topTier.label}
+                            data-testid={`hof-mobile-crown-${pos}`}
+                            className="inline-flex h-6 min-w-[38px] items-center justify-center gap-0.5 rounded border px-1 font-display text-xs font-black tabular-nums whitespace-nowrap shadow-2xs"
+                            style={{
+                              background: topTier.rankBg,
+                              borderColor: topTier.rankBorder,
+                              color: topTier.rankText,
+                            }}
                           >
-                            {pos}
+                            <RankCrownIcon tierStyle={topTier} className="h-3.5 w-3.5 shrink-0" />
+                            <span>{pos}</span>
                           </span>
                         ) : (
-                          <span className="inline-flex h-6 min-w-[28px] items-center justify-center font-semibold text-xs text-[#6c5d49] tabular-nums">
+                          <span className="inline-flex h-6 min-w-[38px] items-center justify-center font-semibold text-xs text-[#6c5d49] tabular-nums">
                             {pos}
                           </span>
                         )}
                       </div>
 
-                      {/* Middle: Nickname + Rank Seal + Meta + KST Timestamp */}
+                      {/* Middle: Top-3 Title + Nickname + 7-Tier Rank Seal + Meta + KST Date */}
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="truncate text-sm font-bold text-[#1f1a14]">
+                        <div className="flex flex-wrap items-center gap-1 min-w-0">
+                          {topTier && (
+                            <span
+                              data-testid={`hof-mobile-title-${pos}`}
+                              className="inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-black leading-none whitespace-nowrap"
+                              style={{
+                                backgroundColor: topTier.titleBg,
+                                borderColor: topTier.titleBorder,
+                                color: topTier.titleText,
+                              }}
+                            >
+                              {topTier.title}
+                            </span>
+                          )}
+                          <span className="min-w-0 max-w-full truncate text-sm font-bold text-[#1f1a14]">
                             {entry.nickname}
                           </span>
-                          <span className="shrink-0 rounded bg-[#f2e2dc] px-1.5 py-0.5 font-display text-[11px] font-black leading-none text-[#9e2a22]">
+                          <span
+                            data-testid={`hof-mobile-rank-${pos}`}
+                            className="inline-flex shrink-0 items-center justify-center rounded border px-1.5 py-0.5 font-display text-[10px] font-black leading-none whitespace-nowrap"
+                            style={{
+                              background: rankStyle.badgeBg,
+                              borderColor: rankStyle.badgeBorder,
+                              color: rankStyle.badgeText,
+                              boxShadow: rankStyle.badgeShadow,
+                            }}
+                          >
                             {entry.rank}등급
                           </span>
                         </div>
@@ -272,13 +405,13 @@ export function HallOfFameModal({ onClose, recentEntry }: HallOfFameModalProps) 
                           )}
                         </div>
 
-                        {formattedDateTime && (
+                        {formattedDate && (
                           <time
                             dateTime={entry.created_at ?? undefined}
                             data-testid={`hof-mobile-time-${pos}`}
                             className="mt-0.5 block text-[11px] leading-tight text-[#7c6d58] tabular-nums whitespace-nowrap"
                           >
-                            {formattedDateTime}
+                            {formattedDate}
                           </time>
                         )}
                       </div>
@@ -300,8 +433,8 @@ export function HallOfFameModal({ onClose, recentEntry }: HallOfFameModalProps) 
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-[#d9c9aa] text-[11px] font-semibold text-[#6a5b46]">
-                      <th className="py-2 pr-2 w-12">순위</th>
-                      <th className="py-2 px-2">닉네임 / 등록일시</th>
+                      <th className="py-2 pr-2 w-16 whitespace-nowrap">순위</th>
+                      <th className="py-2 px-2">닉네임 / 등록일</th>
                       <th className="py-2 px-2 whitespace-nowrap">세력</th>
                       <th className="py-2 px-2 text-center whitespace-nowrap">등급</th>
                       <th className="py-2 px-2 text-right whitespace-nowrap">턴</th>
@@ -312,42 +445,65 @@ export function HallOfFameModal({ onClose, recentEntry }: HallOfFameModalProps) 
                   <tbody className="divide-y divide-[#e8dcc4]">
                     {entries.map((entry, idx) => {
                       const pos = idx + 1;
-                      const medal = getRankMedalStyle(pos);
+                      const topTier = getTopRankTier(pos);
+                      const rankStyle = VICTORY_RANK_STYLES[entry.rank] ?? VICTORY_RANK_STYLES.C;
                       const factionInfo = FACTIONS[entry.faction];
-                      const formattedDateTime = formatHallOfFameDateTime(entry.created_at);
+                      const formattedDate = formatHallOfFameDateTime(entry.created_at);
 
                       return (
                         <tr
                           key={entry.id}
                           data-testid={`hof-row-${pos}`}
-                          className={pos <= 3 ? 'bg-[#f6ecd4]/75' : undefined}
+                          className={topTier ? topTier.rowBgClass : undefined}
                         >
-                          <td className="py-2.5 pr-2 align-middle">
-                            {medal ? (
+                          <td className="py-2.5 pr-2 align-middle whitespace-nowrap">
+                            {topTier ? (
                               <span
-                                className="inline-flex h-6 min-w-[30px] items-center justify-center rounded px-1.5 font-display text-xs font-black tabular-nums"
-                                style={{ backgroundColor: medal.bg, color: medal.color }}
+                                aria-label={topTier.label}
+                                data-testid={`hof-crown-${pos}`}
+                                className="inline-flex h-6 min-w-[42px] items-center justify-center gap-1 rounded border px-1.5 font-display text-xs font-black tabular-nums whitespace-nowrap shadow-2xs"
+                                style={{
+                                  background: topTier.rankBg,
+                                  borderColor: topTier.rankBorder,
+                                  color: topTier.rankText,
+                                }}
                               >
-                                {pos}
+                                <RankCrownIcon tierStyle={topTier} className="h-3.5 w-3.5 shrink-0" />
+                                <span>{pos}</span>
                               </span>
                             ) : (
-                              <span className="pl-1.5 font-semibold text-[#6c5d49] tabular-nums">
+                              <span className="inline-flex min-w-[42px] justify-center font-semibold text-[#6c5d49] tabular-nums">
                                 {pos}
                               </span>
                             )}
                           </td>
-                          <td className="py-2.5 px-2 max-w-[180px] align-middle">
+                          <td className="py-2.5 px-2 max-w-[210px] align-middle">
                             <div className="min-w-0">
-                              <div className="truncate font-bold text-[#1f1a14]">
-                                {entry.nickname}
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {topTier && (
+                                  <span
+                                    data-testid={`hof-title-${pos}`}
+                                    className="inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-black leading-none whitespace-nowrap"
+                                    style={{
+                                      backgroundColor: topTier.titleBg,
+                                      borderColor: topTier.titleBorder,
+                                      color: topTier.titleText,
+                                    }}
+                                  >
+                                    {topTier.title}
+                                  </span>
+                                )}
+                                <span className="truncate font-bold text-[#1f1a14]">
+                                  {entry.nickname}
+                                </span>
                               </div>
-                              {formattedDateTime && (
+                              {formattedDate && (
                                 <time
                                   dateTime={entry.created_at ?? undefined}
                                   data-testid={`hof-time-${pos}`}
                                   className="mt-0.5 block text-[11px] font-normal leading-tight text-[#7c6d58] tabular-nums whitespace-nowrap"
                                 >
-                                  {formattedDateTime}
+                                  {formattedDate}
                                 </time>
                               )}
                             </div>
@@ -362,8 +518,17 @@ export function HallOfFameModal({ onClose, recentEntry }: HallOfFameModalProps) 
                               {factionInfo.shortName}
                             </span>
                           </td>
-                          <td className="py-2.5 px-2 text-center align-middle">
-                            <span className="font-display font-black text-[#9e2a22]">
+                          <td className="py-2.5 px-2 text-center align-middle whitespace-nowrap">
+                            <span
+                              data-testid={`hof-rank-${pos}`}
+                              className="inline-flex min-w-[34px] items-center justify-center rounded border px-1.5 py-0.5 font-display text-xs font-black leading-none whitespace-nowrap"
+                              style={{
+                                background: rankStyle.badgeBg,
+                                borderColor: rankStyle.badgeBorder,
+                                color: rankStyle.badgeText,
+                                boxShadow: rankStyle.badgeShadow,
+                              }}
+                            >
                               {entry.rank}
                             </span>
                           </td>

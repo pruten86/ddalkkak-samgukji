@@ -1,5 +1,7 @@
 import {
   ALL_CITY_IDS,
+  BASE_FIRE_LOSS_RATE,
+  BASE_MAX_FIRE_USES,
   BASE_RECRUIT_TROOPS,
   FACTIONS,
   INITIAL_CITIES,
@@ -10,6 +12,8 @@ import {
   NEUTRAL_REPLENISH_TROOPS,
   NEUTRAL_TROOP_CAP,
   PLAYABLE_FACTIONS,
+  SOUTHEAST_WIND_FIRE_BONUS,
+  SOUTHEAST_WIND_MAX_FIRE_USES,
   getStartingCityForFaction,
 } from './data';
 import type {
@@ -50,7 +54,10 @@ export function cloneCities(cities: Record<CityId, CityState>): Record<CityId, C
   const next = {} as Record<CityId, CityState>;
   for (const id of ALL_CITY_IDS) {
     const c = cities[id];
-    next[id] = { ...c, adjacent: [...c.adjacent] };
+    next[id] = {
+      ...c,
+      adjacent: [...c.adjacent],
+    };
   }
   return next;
 }
@@ -72,8 +79,9 @@ export function createInitialGameState(
     turnMaxAp: MAX_AP,
     nextTurnBonusAp: 0,
     victoryApBonusActive: false,
-    fireUsedThisTurn: false,
-    fireEnhancedThisTurn: false,
+    fireUsesThisTurn: 0,
+    maxFireUsesThisTurn: BASE_MAX_FIRE_USES,
+    fireBonusRateThisTurn: 0,
     cities,
     selectedCityId: startCity,
     commandMode: 'idle',
@@ -112,6 +120,35 @@ export function getAttackMultiplier(faction: FactionId): number {
 
 export function getDefenseMultiplier(faction: FactionId, isImperial: boolean): number {
   return FACTIONS[faction].defenseMult + (isImperial ? LUOYANG_DEFENSE_BONUS : 0);
+}
+
+/**
+ * Returns the AP cost of the next fire attack for the given faction.
+ * Wu's first fire attack each turn (fireUsesThisTurn === 0) costs 0 AP; subsequent uses cost 1 AP.
+ */
+export function getFireApCost(faction: FactionId, fireUsesThisTurn: number): number {
+  return faction === 'wu' && fireUsesThisTurn === 0 ? 0 : 1;
+}
+
+/**
+ * Checks whether the faction can perform another fire attack this turn given remaining AP and uses.
+ */
+export function canUseFireAttack(
+  faction: FactionId,
+  ap: number,
+  fireUsesThisTurn: number,
+  maxFireUsesThisTurn: number
+): boolean {
+  if (fireUsesThisTurn >= maxFireUsesThisTurn) return false;
+  return ap >= getFireApCost(faction, fireUsesThisTurn);
+}
+
+/**
+ * Computes effective fire attack troop loss rate (0.30 base + bonus rate such as 0.10 Southeast Wind = 0.40) for all factions.
+ */
+export function getFireLossRate(_faction: FactionId, fireBonusRate = 0): number {
+  const bonus = Math.max(0, fireBonusRate);
+  return Math.min(0.8, Number((BASE_FIRE_LOSS_RATE + bonus).toFixed(2)));
 }
 
 export function getSendTroops(sourceTroops: number, ratio: MarchRatio): number {
@@ -228,6 +265,7 @@ export function executeMarchOrTransport(
   }
 
   const battle = resolveCombat(fromId, source.owner, sentTroops, target, rng);
+
   if (battle.attackerWon) {
     next[toId].owner = source.owner;
     next[toId].troops = battle.remainingTroops;
@@ -247,10 +285,11 @@ export function executeFireAttack(
   cities: Record<CityId, CityState>,
   fromId: CityId,
   toId: CityId,
-  enhancedFire = false
+  fireBonusRate = 0
 ): {
   cities: Record<CityId, CityState>;
   troopsLost: number;
+  lossRate: number;
 } | null {
   const source = cities[fromId];
   const target = cities[toId];
@@ -259,7 +298,7 @@ export function executeFireAttack(
   if (source.owner === target.owner) return null;
 
   const next = cloneCities(cities);
-  const lossRate = enhancedFire ? 0.5 : 0.35;
+  const lossRate = getFireLossRate(source.owner, fireBonusRate);
   const rawLoss = Math.max(1, Math.round(target.troops * lossRate));
   const actualRemaining = Math.max(1, target.troops - rawLoss);
   const troopsLost = target.troops - actualRemaining;
@@ -268,6 +307,7 @@ export function executeFireAttack(
   return {
     cities: next,
     troopsLost,
+    lossRate,
   };
 }
 
@@ -424,8 +464,9 @@ export function checkLuBuAppearance(
 export interface RandomEventResult {
   cities: Record<CityId, CityState>;
   eventModal: GameEventModalData;
-  enhanceFireThisTurn: boolean;
   bonusAp: number;
+  maxFireUsesThisTurn: number;
+  fireBonusRateThisTurn: number;
   targetCityId?: CityId;
 }
 
@@ -446,8 +487,9 @@ export function triggerThreeTurnEvent(
     }
     return {
       cities: next,
-      enhanceFireThisTurn: false,
       bonusAp: 0,
+      maxFireUsesThisTurn: BASE_MAX_FIRE_USES,
+      fireBonusRateThisTurn: 0,
       eventModal: {
         type: 'harvest',
         title: '중원 대풍년',
@@ -460,17 +502,25 @@ export function triggerThreeTurnEvent(
   }
 
   if (roll === 1) {
-    // 동남풍: Fire attack boosted to 50% + 1 bonus AP this turn
+    // 적벽의 동남풍: AP +1, maxFireUsesThisTurn = 2, fireBonusRateThisTurn = +0.10 (40% for all factions)
+    const enhancedPct = Math.round(
+      getFireLossRate(playerFaction, SOUTHEAST_WIND_FIRE_BONUS) * 100
+    );
     return {
       cities: next,
-      enhanceFireThisTurn: true,
       bonusAp: 1,
+      maxFireUsesThisTurn: SOUTHEAST_WIND_MAX_FIRE_USES,
+      fireBonusRateThisTurn: SOUTHEAST_WIND_FIRE_BONUS,
       eventModal: {
         type: 'southeast_wind',
         title: '적벽의 동남풍',
         subtitle: '3턴 주기 돌발 사건',
-        description: '거센 동남풍이 중원 전역으로 불어옵니다! 화공 계략을 펼치기에 더할 나위 없는 절호의 기회입니다.',
-        effectSummary: '이번 턴 화공 피해 50%로 강화 · 행동력 +1 추가',
+        description:
+          '순풍이 불어옵니다! 이번 턴 행동력 +1, 화공 2회 사용 가능, 화공 피해량 +10% 증가!',
+        effectSummary:
+          playerFaction === 'wu'
+            ? `행동력 +1 · 화공 2회 (1타 0 AP / 2타 1 AP) · 화공 피해 ${enhancedPct}%`
+            : `행동력 +1 · 화공 2회 (회당 1 AP) · 화공 피해 ${enhancedPct}%`,
         accentColor: '#b5382a',
       },
     };
@@ -484,8 +534,9 @@ export function triggerThreeTurnEvent(
     hitCity.troops = Math.max(10, hitCity.troops - lost);
     return {
       cities: next,
-      enhanceFireThisTurn: false,
       bonusAp: 0,
+      maxFireUsesThisTurn: BASE_MAX_FIRE_USES,
+      fireBonusRateThisTurn: 0,
       targetCityId: hitCity.id,
       eventModal: {
         type: 'plague',
@@ -513,8 +564,9 @@ export function triggerThreeTurnEvent(
       chosen.troops += 35;
       return {
         cities: next,
-        enhanceFireThisTurn: false,
         bonusAp: 0,
+        maxFireUsesThisTurn: BASE_MAX_FIRE_USES,
+        fireBonusRateThisTurn: 0,
         targetCityId: chosen.id,
         eventModal: {
           type: 'renowned_general',
@@ -539,8 +591,9 @@ export function triggerThreeTurnEvent(
 
   return {
     cities: next,
-    enhanceFireThisTurn: false,
     bonusAp: 0,
+    maxFireUsesThisTurn: BASE_MAX_FIRE_USES,
+    fireBonusRateThisTurn: 0,
     targetCityId: target.id,
     eventModal: {
       type: 'warlord_infighting',
@@ -659,29 +712,50 @@ export function calculateVictoryRank(turns: number): {
   title: string;
   comment: string;
 } {
+  if (turns <= 15) {
+    return {
+      rank: 'SS',
+      title: '전설의 신군',
+      comment: '신화적인 지략과 전광석화 같은 결단력으로 순식간에 중원을 평정했습니다!',
+    };
+  }
   if (turns <= 20) {
     return {
       rank: 'S',
       title: '천하무적 패왕',
-      comment: '전광석화 같은 지략과 결단력으로 순식간에 중원을 통일했습니다!',
+      comment: '압도적인 용병술과 기세로 삼국의 패권을 손에 쥐었습니다!',
+    };
+  }
+  if (turns <= 25) {
+    return {
+      rank: 'A',
+      title: '난세의 영웅',
+      comment: '탁월한 전략과 균형 잡힌 운영으로 천하를 호령했습니다.',
     };
   }
   if (turns <= 30) {
     return {
-      rank: 'A',
-      title: '난세의 영웅',
-      comment: '탁월한 전략과 용병술로 삼국의 패권을 손에 쥐었습니다.',
+      rank: 'B',
+      title: '지략의 패자',
+      comment: '치밀한 공방과 기민한 판단으로 중원의 주인이 되었습니다.',
+    };
+  }
+  if (turns <= 35) {
+    return {
+      rank: 'C',
+      title: '불굴의 명장',
+      comment: '수많은 격전을 돌파하며 끝내 천하를 하나로 아울렀습니다.',
     };
   }
   if (turns <= 40) {
     return {
-      rank: 'B',
-      title: '지략의 패자',
-      comment: '치열한 공방 끝에 끝내 천하를 하나로 아울렀습니다.',
+      rank: 'D',
+      title: '노련한 제후',
+      comment: '끈질긴 항전과 노련한 수성 끝에 대업을 완수했습니다.',
     };
   }
   return {
-    rank: 'C',
+    rank: 'E',
     title: '백전노장',
     comment: '길고 험난한 대장정 끝에 마침내 태평성대를 열었습니다.',
   };

@@ -28,18 +28,18 @@ test('normalizeSupabaseUrl handles valid URLs and safely returns empty string fo
   assert.equal(normalizeSupabaseUrl('ftp://invalid-protocol.example.com'), '');
 });
 
-test('normalizeHallOfFameRow maps rank_grade, rank, and grade columns cleanly and preserves nullable created_at', () => {
+test('normalizeHallOfFameRow maps SS~E rank_grade, rank, and grade columns cleanly and preserves nullable created_at', () => {
   const fromRankGrade = normalizeHallOfFameRow({
     id: '1',
     nickname: '제갈공명',
     faction: 'shu',
-    rank_grade: 'S',
-    turns: 16,
+    rank_grade: 'SS',
+    turns: 14,
     lubu_defeated: true,
     score: 10225,
     created_at: '2026-01-01T00:00:00Z',
   });
-  assert.equal(fromRankGrade.rank, 'S');
+  assert.equal(fromRankGrade.rank, 'SS');
   assert.equal(fromRankGrade.nickname, '제갈공명');
   assert.equal(fromRankGrade.lubu_defeated, true);
   assert.equal(fromRankGrade.created_at, '2026-01-01T00:00:00Z');
@@ -48,28 +48,39 @@ test('normalizeHallOfFameRow maps rank_grade, rank, and grade columns cleanly an
     id: '2',
     nickname: '조맹덕',
     faction: 'wei',
-    rank: 'A',
-    turns: 22,
+    rank: 'E',
+    turns: 45,
     lubu_defeated: false,
-    score: 6800,
+    score: 3800,
   });
-  assert.equal(fromLegacyRank.rank, 'A');
+  assert.equal(fromLegacyRank.rank, 'E');
   assert.equal(fromLegacyRank.created_at, null);
+
+  const fromInvalidRank = normalizeHallOfFameRow({
+    id: '3',
+    nickname: '손중모',
+    faction: 'wu',
+    grade: 'UNKNOWN',
+    turns: 33,
+    lubu_defeated: false,
+    score: 5200,
+  });
+  assert.equal(fromInvalidRank.rank, 'C');
 });
 
-test('formatHallOfFameDateTime converts UTC timestamps to KST (Asia/Seoul) YYYY.MM.DD HH:mm including midnight rollover', () => {
-  // Standard UTC -> KST (+09:00)
-  assert.equal(formatHallOfFameDateTime('2026-11-24T14:22:00Z'), '2026.11.24 23:22');
-  // Exact midnight rollover in KST (15:00Z -> next day 00:00 KST, never 24:00)
-  assert.equal(formatHallOfFameDateTime('2026-11-24T15:00:00Z'), '2026.11.25 00:00');
+test('formatHallOfFameDateTime converts UTC timestamps to KST (Asia/Seoul) YYYY.MM.DD including midnight & year rollover', () => {
+  // Standard UTC -> KST (+09:00), date only without HH:mm
+  assert.equal(formatHallOfFameDateTime('2026-11-24T14:22:00Z'), '2026.11.24');
+  // Exact midnight rollover in KST (15:00Z -> next day KST)
+  assert.equal(formatHallOfFameDateTime('2026-11-24T15:00:00Z'), '2026.11.25');
   // Just past midnight rollover with fractional seconds
-  assert.equal(formatHallOfFameDateTime('2026-11-24T15:05:45.123Z'), '2026.11.25 00:05');
-  // Year rollover in KST (Dec 31 16:30 UTC -> Jan 1 01:30 KST)
-  assert.equal(formatHallOfFameDateTime('2026-12-31T16:30:00Z'), '2027.01.01 01:30');
-  // Zero padding for single-digit month, day, hour, minute
-  assert.equal(formatHallOfFameDateTime('2026-03-04T00:05:00Z'), '2026.03.04 09:05');
+  assert.equal(formatHallOfFameDateTime('2026-11-24T15:05:45.123Z'), '2026.11.25');
+  // Year rollover in KST (Dec 31 16:30 UTC -> Jan 1 KST)
+  assert.equal(formatHallOfFameDateTime('2026-12-31T16:30:00Z'), '2027.01.01');
+  // Zero padding for single-digit month and day
+  assert.equal(formatHallOfFameDateTime('2026-03-04T00:05:00Z'), '2026.03.04');
   // PostgreSQL space-separated UTC timestamp format
-  assert.equal(formatHallOfFameDateTime('2026-11-24 14:22:00+00'), '2026.11.24 23:22');
+  assert.equal(formatHallOfFameDateTime('2026-11-24 14:22:00+00'), '2026.11.24');
 });
 
 test('formatHallOfFameDateTime safely returns empty string for null, empty, or invalid inputs', () => {

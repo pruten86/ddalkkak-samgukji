@@ -10,7 +10,7 @@ import {
   Trophy,
   X,
 } from 'lucide-react';
-import { FACTIONS } from '../game/data';
+import { FACTIONS, VICTORY_RANK_GUIDE_TEXT, VICTORY_RANK_STYLES } from '../game/data';
 import { calculateAchievementScore, calculateVictoryRank } from '../game/engine';
 import { LUBU_TAUNT_LINES } from '../game/portraits';
 import { sound } from '../game/sound';
@@ -348,7 +348,7 @@ export function SettlementModal({
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold text-[#6e5d47]">
-              딸깍 삼국지 · {faction.name} · 제 {turn}턴
+              딸깍 삼국지 · {faction.name} [{faction.traitName}] · 제 {turn}턴
             </p>
             <h2
               id="settlement-modal-title"
@@ -364,15 +364,40 @@ export function SettlementModal({
           </div>
 
           {isVictory ? (
-            <div
-              className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-md border-2 border-[#9e2a22] bg-[#9e2a22] text-[#faf3e3] shadow-sm sm:h-16 sm:w-16"
-              aria-label={`최종 등급 ${rankInfo.rank}`}
-            >
-              <span className="text-[10px] font-semibold opacity-85">등급</span>
-              <span className="font-display text-2xl font-black leading-none sm:text-3xl">
-                {rankInfo.rank}
-              </span>
-            </div>
+            (() => {
+              const rankStyle = VICTORY_RANK_STYLES[rankInfo.rank] ?? VICTORY_RANK_STYLES.C;
+              const isDoubleChar = rankInfo.rank.length >= 2;
+              return (
+                <div
+                  data-testid="settlement-rank-badge"
+                  className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-md border-2 shadow-sm sm:h-16 sm:w-16"
+                  style={{
+                    background: rankStyle.badgeBg,
+                    borderColor: rankStyle.badgeBorder,
+                    color: rankStyle.badgeText,
+                    boxShadow: rankStyle.badgeShadow,
+                  }}
+                  aria-label={`최종 등급 ${rankInfo.rank}`}
+                >
+                  {rankStyle.isTopTier && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-[3px] rounded-[4px] border border-[#ffe9a6]/75"
+                    />
+                  )}
+                  <span className="text-[10px] font-semibold opacity-90 whitespace-nowrap">등급</span>
+                  <span
+                    className={`font-display font-black leading-none whitespace-nowrap ${
+                      isDoubleChar
+                        ? 'mt-0.5 text-xl tracking-tight sm:text-2xl'
+                        : 'text-2xl sm:text-3xl'
+                    }`}
+                  >
+                    {rankInfo.rank}
+                  </span>
+                </div>
+              );
+            })()
           ) : (
             <div
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-[#4a4138] text-[#faf3e3]"
@@ -536,8 +561,8 @@ export function SettlementModal({
         )}
 
         {isVictory && (
-          <p className="mb-4 text-center text-[11px] text-[#70614c]">
-            등급 기준: 20턴 이하 S · 21~30턴 A · 31~40턴 B · 41턴 이상 C
+          <p className="mb-4 text-center text-[11px] leading-snug text-[#70614c]">
+            {VICTORY_RANK_GUIDE_TEXT}
           </p>
         )}
 
@@ -697,7 +722,8 @@ export function RulesModal({ onClose }: RulesModalProps) {
                 <strong>출진 / 수송 (1 AP)</strong>: 인접 성지로 병력의 50% / 80% / 95%를 파병 (최소 5명 잔류).
               </li>
               <li>
-                <strong>화공 계략 (1 AP, 턴당 1회)</strong>: 인접 적 성지 병력의 35%를 즉시 소멸시킵니다.
+                <strong>화공 계략 (턴당 1회)</strong>: 인접 적 성지 병력의 30%를 즉시 소멸시킵니다
+                (회당 1 AP · 오 세력은 첫 화공 0 AP · 동남풍 발동 시 2회 사용 및 피해 40%).
               </li>
               <li>
                 <strong>황성 낙양</strong>: 점령 세력에게 매 턴 추가 병력 +20, 낙양 수성 시 방어력 +10%.
@@ -715,7 +741,8 @@ export function RulesModal({ onClose }: RulesModalProps) {
                 <strong style={{ color: FACTIONS.wei.color }}>위(조조)</strong> — [패도] 공격력 +15%
               </li>
               <li>
-                <strong style={{ color: FACTIONS.wu.color }}>오(손권)</strong> — [수성] 방어력 +20%
+                <strong style={{ color: FACTIONS.wu.color }}>오(손권)</strong> — [수성] 방어력 +20%,
+                턴당 첫 화공 0 AP(무료)
               </li>
               <li>
                 <strong style={{ color: FACTIONS.lubu.color }}>여포군</strong> — [무쌍] 공격 +35%, 방어 +10%, 징병 +15%
@@ -735,9 +762,10 @@ export function RulesModal({ onClose }: RulesModalProps) {
 
           <section>
             <h3 className="font-display font-bold text-[#1f1a14]">천하통일 등급 및 점수 기준</h3>
-            <p className="mt-1 text-xs text-[#594b3a]">
-              15개 성지 모두 점령 시: 20턴 이하 <strong>S</strong> · 21~30턴 <strong>A</strong> ·
-              31~40턴 <strong>B</strong> · 41턴 이상 <strong>C</strong>
+            <p className="mt-1 text-xs leading-relaxed text-[#594b3a]">
+              15개 성지 모두 점령 시: ~15턴 <strong>SS</strong> · 16~20턴 <strong>S</strong> ·
+              21~25턴 <strong>A</strong> · 26~30턴 <strong>B</strong> · 31~35턴{' '}
+              <strong>C</strong> · 36~40턴 <strong>D</strong> · 41턴 이상 <strong>E</strong>
             </p>
             <p className="mt-1 text-xs text-[#594b3a]">
               업적 점수: 기본점수(최대 10,000, 턴당 -150, 최소 500) + 여포 토벌(1,500) + 잔여 병력(최대 1,500)

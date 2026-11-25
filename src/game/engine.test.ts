@@ -5,6 +5,7 @@ import {
   applyEndOfRoundGrowth,
   calculateAchievementScore,
   calculateVictoryRank,
+  canUseFireAttack,
   checkLuBuAppearance,
   countTerritories,
   createInitialCities,
@@ -15,6 +16,8 @@ import {
   formatEliminationRewardMessage,
   getCombatForecast,
   getDefenseMultiplier,
+  getFireApCost,
+  getFireLossRate,
   getRecruitAmount,
   getSendTroops,
   hasDefeatedLuBu,
@@ -63,7 +66,8 @@ test('faction traits apply properly to recruit, attack, defense, and Luoyang imp
   assert.equal(FACTIONS.lubu.attackMult, 1.35);
   assert.equal(FACTIONS.lubu.defenseMult, 1.1);
 
-  // Luoyang adds +10% defense
+  // Luoyang adds +10% defense (Wu +20% + Luoyang +10% = +30%)
+  assert.ok(Math.abs(getDefenseMultiplier('wu', false) - 1.2) < 1e-6);
   assert.ok(Math.abs(getDefenseMultiplier('wu', true) - 1.3) < 1e-6);
   assert.ok(Math.abs(getDefenseMultiplier('neutral', true) - 1.1) < 1e-6);
 
@@ -109,20 +113,20 @@ test('combat formula and forecast work deterministically', () => {
   assert.ok(loss.remainingTroops >= 1 && loss.remainingTroops < 75);
 });
 
-test('fire attack reduces enemy troops by 35% (or 50% with southeast wind)', () => {
+test('fire attack reduces enemy troops by 30% (or 40% with +10%p southeast wind bonus)', () => {
   const cities = createInitialCities();
-  const res = executeFireAttack(cities, 'chengdu', 'hanzhong', false);
+  const res = executeFireAttack(cities, 'chengdu', 'hanzhong', 0);
   assert.ok(res);
-  assert.equal(res.troopsLost, 18); // round(50 * 0.35) = 18
-  assert.equal(res.cities.hanzhong.troops, 32);
+  assert.equal(res.troopsLost, 15); // round(50 * 0.30) = 15
+  assert.equal(res.cities.hanzhong.troops, 35);
 
-  const enhanced = executeFireAttack(cities, 'chengdu', 'hanzhong', true);
+  const enhanced = executeFireAttack(cities, 'chengdu', 'hanzhong', 0.1);
   assert.ok(enhanced);
-  assert.equal(enhanced.troopsLost, 25);
-  assert.equal(enhanced.cities.hanzhong.troops, 25);
+  assert.equal(enhanced.troopsLost, 20); // round(50 * 0.40) = 20
+  assert.equal(enhanced.cities.hanzhong.troops, 30);
 
   // Cannot fire attack friendly city
-  assert.equal(executeFireAttack(cities, 'chengdu', 'jiangling', false), null);
+  assert.equal(executeFireAttack(cities, 'chengdu', 'jiangling', 0), null);
 });
 
 test('end of round growth grants +20 at Luoyang for non-neutral owner and small neutral replenish', () => {
@@ -206,12 +210,20 @@ test('3-turn random events produce valid states and victory ranks match exact cu
     assert.equal(Object.keys(countTerritories(res.cities)).length, 5);
   }
 
+  assert.equal(calculateVictoryRank(1).rank, 'SS');
+  assert.equal(calculateVictoryRank(15).rank, 'SS');
+  assert.equal(calculateVictoryRank(16).rank, 'S');
   assert.equal(calculateVictoryRank(20).rank, 'S');
   assert.equal(calculateVictoryRank(21).rank, 'A');
-  assert.equal(calculateVictoryRank(30).rank, 'A');
-  assert.equal(calculateVictoryRank(31).rank, 'B');
-  assert.equal(calculateVictoryRank(40).rank, 'B');
-  assert.equal(calculateVictoryRank(41).rank, 'C');
+  assert.equal(calculateVictoryRank(25).rank, 'A');
+  assert.equal(calculateVictoryRank(26).rank, 'B');
+  assert.equal(calculateVictoryRank(30).rank, 'B');
+  assert.equal(calculateVictoryRank(31).rank, 'C');
+  assert.equal(calculateVictoryRank(35).rank, 'C');
+  assert.equal(calculateVictoryRank(36).rank, 'D');
+  assert.equal(calculateVictoryRank(40).rank, 'D');
+  assert.equal(calculateVictoryRank(41).rank, 'E');
+  assert.equal(calculateVictoryRank(60).rank, 'E');
 });
 
 test('achievement score formula calculates base, Lu Bu bonus, troop bonus, floor, and 15000 cap', () => {
@@ -333,4 +345,107 @@ test('eliminating Lu Bu or a rival major lord grants 3 AP next turn, then return
   assert.equal(isMajorEliminationReward('shu', 'neutral', 'shu', citiesNeutral), false);
   assert.equal(isMajorEliminationReward('wu', 'wei', 'shu', resWei.cities), false);
 });
+
+test('Wu [수성] passive: +20% defense (+30% at Luoyang), 0 AP 30% first fire (even at 0 AP), 1-use cap, and AI Wu never uses fire', () => {
+  const initial = createInitialGameState('wu', 'playing');
+  assert.equal(FACTIONS.wu.traitName, '수성');
+  assert.equal(FACTIONS.wu.traitSummary, '방어 +20% · 화공 0 AP');
+  assert.equal(FACTIONS.wu.defenseMult, 1.2);
+  assert.ok(Math.abs(getDefenseMultiplier('wu', false) - 1.2) < 1e-6);
+  assert.ok(Math.abs(getDefenseMultiplier('wu', true) - 1.3) < 1e-6);
+  assert.equal(initial.fireUsesThisTurn, 0);
+  assert.equal(initial.maxFireUsesThisTurn, 1);
+  assert.equal(initial.fireBonusRateThisTurn, 0);
+
+  // First fire for Wu costs 0 AP and is allowed even when AP is 0
+  assert.equal(getFireApCost('wu', 0), 0);
+  assert.equal(canUseFireAttack('wu', 0, 0, 1), true);
+  // Non-Wu cannot fire at 0 AP
+  assert.equal(getFireApCost('shu', 0), 1);
+  assert.equal(canUseFireAttack('shu', 0, 0, 1), false);
+  assert.equal(canUseFireAttack('wei', 0, 0, 1), false);
+
+  // Execute Wu's 30% fire attack on Hefei (100 troops -> 30 lost, 70 remaining — same damage rate as Shu/Wei)
+  const cities = createInitialCities();
+  cities.hefei.owner = 'wei';
+  cities.hefei.troops = 100;
+  const fireRes = executeFireAttack(cities, 'jianye', 'hefei', 0);
+  assert.ok(fireRes);
+  assert.ok(Math.abs(fireRes.lossRate - 0.3) < 1e-6);
+  assert.equal(fireRes.troopsLost, 30);
+  assert.equal(fireRes.cities.hefei.troops, 70);
+
+  // AP remains unchanged (0 AP cost), and 2nd fire is blocked on a normal turn (maxFireUsesThisTurn = 1)
+  const apAfterFirst = 0 - getFireApCost('wu', 0);
+  assert.equal(apAfterFirst, 0);
+  assert.equal(canUseFireAttack('wu', 2, 1, 1), false);
+
+  // AI-controlled Wu never plans a fire attack (only attack / transport / recruit)
+  const aiPlan = planAiAction(cities, 'wu', null);
+  assert.ok(aiPlan);
+  assert.ok(['attack', 'transport', 'recruit'].includes(aiPlan.type));
+});
+
+test('Southeast Wind event grants +1 AP, 2 fire uses (Wu: 1st 0 AP / 2nd 1 AP), and 40% fire damage for all factions', () => {
+  const cities = createInitialCities();
+  cities.hefei.owner = 'wei';
+  cities.hefei.troops = 100;
+  cities.xiapi.owner = 'wei';
+  cities.xiapi.troops = 100;
+
+  // roll = floor(0.25 * 5) = 1 -> southeast_wind
+  const evWu = triggerThreeTurnEvent(cities, 'wu', () => 0.25);
+  assert.equal(evWu.eventModal.type, 'southeast_wind');
+  assert.equal(
+    evWu.eventModal.description,
+    '순풍이 불어옵니다! 이번 턴 행동력 +1, 화공 2회 사용 가능, 화공 피해량 +10% 증가!'
+  );
+  assert.equal(evWu.bonusAp, 1);
+  assert.equal(evWu.maxFireUsesThisTurn, 2);
+  assert.ok(Math.abs(evWu.fireBonusRateThisTurn - 0.1) < 1e-6);
+
+  // AP roll includes +1 bonus AP from Southeast Wind (2 base + 1 event = 3 AP)
+  const apTurn = resolveNextPlayerTurnAp(2, 0, evWu.bonusAp);
+  assert.equal(apTurn.ap, 3);
+
+  // All factions deal 30% + 10%p = 40% fire damage during Southeast Wind
+  assert.ok(Math.abs(getFireLossRate('wu', evWu.fireBonusRateThisTurn) - 0.4) < 1e-6);
+  assert.ok(Math.abs(getFireLossRate('shu', evWu.fireBonusRateThisTurn) - 0.4) < 1e-6);
+  assert.ok(Math.abs(getFireLossRate('wei', evWu.fireBonusRateThisTurn) - 0.4) < 1e-6);
+
+  // Wu 1st shot: 0 AP cost, 40% damage, works even if AP=0
+  assert.equal(getFireApCost('wu', 0), 0);
+  assert.equal(canUseFireAttack('wu', 0, 0, evWu.maxFireUsesThisTurn), true);
+  const wuShot1 = executeFireAttack(cities, 'jianye', 'hefei', evWu.fireBonusRateThisTurn);
+  assert.ok(wuShot1);
+  assert.equal(wuShot1.troopsLost, 40);
+  assert.equal(wuShot1.cities.hefei.troops, 60);
+
+  let wuAp = apTurn.ap - getFireApCost('wu', 0);
+  assert.equal(wuAp, 3); // 1st shot was free
+
+  // Wu 2nd shot: 1 AP cost, 40% damage; blocked if AP=0, allowed if AP>=1
+  assert.equal(getFireApCost('wu', 1), 1);
+  assert.equal(canUseFireAttack('wu', 0, 1, evWu.maxFireUsesThisTurn), false);
+  assert.equal(canUseFireAttack('wu', wuAp, 1, evWu.maxFireUsesThisTurn), true);
+  const wuShot2 = executeFireAttack(wuShot1.cities, 'jianye', 'xiapi', evWu.fireBonusRateThisTurn);
+  assert.ok(wuShot2);
+  assert.equal(wuShot2.troopsLost, 40);
+  assert.equal(wuShot2.cities.xiapi.troops, 60);
+
+  wuAp -= getFireApCost('wu', 1);
+  assert.equal(wuAp, 2); // 2nd shot spent 1 AP
+
+  // 3rd shot blocked (max 2 uses)
+  assert.equal(canUseFireAttack('wu', wuAp, 2, evWu.maxFireUsesThisTurn), false);
+
+  // Shu/Wei pay 1 AP on both 1st and 2nd fire shots during Southeast Wind
+  assert.equal(getFireApCost('wei', 0), 1);
+  assert.equal(getFireApCost('wei', 1), 1);
+  assert.equal(canUseFireAttack('wei', 2, 0, evWu.maxFireUsesThisTurn), true);
+  assert.equal(canUseFireAttack('wei', 1, 1, evWu.maxFireUsesThisTurn), true);
+  assert.equal(canUseFireAttack('wei', 1, 2, evWu.maxFireUsesThisTurn), false);
+});
+
+
 

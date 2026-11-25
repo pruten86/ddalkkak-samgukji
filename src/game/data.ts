@@ -1,4 +1,11 @@
-import type { CityDefinition, CityId, FactionConfig, FactionId, PlayableFactionId } from './types';
+import type {
+  CityDefinition,
+  CityId,
+  FactionConfig,
+  FactionId,
+  PlayableFactionId,
+  VictoryRank,
+} from './types';
 
 export const PLAYABLE_FACTIONS: PlayableFactionId[] = ['shu', 'wei', 'wu'];
 export const ALL_CITY_IDS: CityId[] = [
@@ -59,7 +66,7 @@ export const FACTIONS: Record<FactionId, FactionConfig> = {
     darkColor: '#81251b',
     softBg: '#f8e6e4',
     traitName: '수성',
-    traitSummary: '방어력 +20%',
+    traitSummary: '방어 +20% · 화공 0 AP',
     attackMult: 1.0,
     defenseMult: 1.2,
     recruitMult: 1.0,
@@ -237,6 +244,10 @@ export const INITIAL_CITIES: CityDefinition[] = [
 export const BASE_RECRUIT_TROOPS = 35;
 export const LUOYANG_TURN_BONUS = 20;
 export const LUOYANG_DEFENSE_BONUS = 0.1;
+export const BASE_FIRE_LOSS_RATE = 0.3;
+export const SOUTHEAST_WIND_FIRE_BONUS = 0.1;
+export const BASE_MAX_FIRE_USES = 1;
+export const SOUTHEAST_WIND_MAX_FIRE_USES = 2;
 export const MIN_GARRISON_TROOPS = 5;
 export const NEUTRAL_REPLENISH_TROOPS = 4;
 export const NEUTRAL_TROOP_CAP = 80;
@@ -247,3 +258,90 @@ export function getStartingCityForFaction(faction: PlayableFactionId): CityId {
   if (faction === 'wei') return 'xuchang';
   return 'jianye';
 }
+
+export const VICTORY_RANKS: readonly VictoryRank[] = ['SS', 'S', 'A', 'B', 'C', 'D', 'E'] as const;
+
+export const VICTORY_RANK_GUIDE_TEXT =
+  '등급 기준: ~15턴 SS · 16~20 S · 21~25 A · 26~30 B · 31~35 C · 36~40 D · 41+ E';
+
+export interface VictoryRankStyle {
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  badgeShadow?: string;
+  canvasFillStart: string;
+  canvasFillEnd?: string;
+  canvasBorder: string;
+  canvasInnerBorder: string;
+  canvasText: string;
+  isTopTier?: boolean;
+}
+
+export const VICTORY_RANK_STYLES: Record<VictoryRank, VictoryRankStyle> = {
+  SS: {
+    badgeBg: 'linear-gradient(135deg, #8b140e 0%, #b8291d 48%, #c98f1a 100%)',
+    badgeBorder: '#e6ba4c',
+    badgeText: '#fff8db',
+    badgeShadow: '0 0 0 1px rgba(230, 186, 76, 0.55), 0 2px 8px rgba(173, 118, 16, 0.38)',
+    canvasFillStart: '#8d1610',
+    canvasFillEnd: '#c78f1a',
+    canvasBorder: '#e5b849',
+    canvasInnerBorder: 'rgba(255, 240, 184, 0.9)',
+    canvasText: '#fff8dc',
+    isTopTier: true,
+  },
+  S: {
+    badgeBg: '#a3261d',
+    badgeBorder: '#6f1710',
+    badgeText: '#faf3e3',
+    canvasFillStart: '#a3261d',
+    canvasBorder: '#6c1610',
+    canvasInnerBorder: 'rgba(250, 243, 227, 0.78)',
+    canvasText: '#faf3e3',
+  },
+  A: {
+    badgeBg: '#b3680e',
+    badgeBorder: '#7c4506',
+    badgeText: '#fff8ea',
+    canvasFillStart: '#b3680e',
+    canvasBorder: '#7a4406',
+    canvasInnerBorder: 'rgba(255, 247, 230, 0.74)',
+    canvasText: '#fff8ea',
+  },
+  B: {
+    badgeBg: '#2b784c',
+    badgeBorder: '#1b5032',
+    badgeText: '#f3fbf6',
+    canvasFillStart: '#2b784c',
+    canvasBorder: '#1b5032',
+    canvasInnerBorder: 'rgba(243, 251, 246, 0.72)',
+    canvasText: '#f3fbf6',
+  },
+  C: {
+    badgeBg: '#245887',
+    badgeBorder: '#173b5c',
+    badgeText: '#f0f6fc',
+    canvasFillStart: '#245887',
+    canvasBorder: '#173b5c',
+    canvasInnerBorder: 'rgba(240, 246, 252, 0.72)',
+    canvasText: '#f0f6fc',
+  },
+  D: {
+    badgeBg: '#746148',
+    badgeBorder: '#4f412f',
+    badgeText: '#f8f3ea',
+    canvasFillStart: '#746148',
+    canvasBorder: '#4f412f',
+    canvasInnerBorder: 'rgba(248, 243, 234, 0.68)',
+    canvasText: '#f8f3ea',
+  },
+  E: {
+    badgeBg: '#57514b',
+    badgeBorder: '#3a3631',
+    badgeText: '#efebe5',
+    canvasFillStart: '#57514b',
+    canvasBorder: '#3a3631',
+    canvasInnerBorder: 'rgba(239, 235, 229, 0.65)',
+    canvasText: '#efebe5',
+  },
+};

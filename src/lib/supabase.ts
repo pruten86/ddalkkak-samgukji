@@ -24,9 +24,11 @@ export interface NewHallOfFameRecord {
 const LOCAL_STORAGE_KEY = 'ttalkkak_samgukji_hall_of_fame_v1';
 const MAX_HALL_OF_FAME_ROWS = 50;
 
+const VALID_VICTORY_RANKS = new Set<VictoryRank>(['SS', 'S', 'A', 'B', 'C', 'D', 'E']);
+
 /**
- * Formats an ISO / UTC timestamp into Korea Standard Time (Asia/Seoul):
- * `YYYY.MM.DD HH:mm` (24-hour clock, 2-digit zero padding).
+ * Formats an ISO / UTC timestamp into Korea Standard Time (Asia/Seoul) date only:
+ * `YYYY.MM.DD` (2-digit zero padding for month and day).
  * Safely returns `""` for null, empty, or invalid timestamps.
  */
 export function formatHallOfFameDateTime(isoString?: string | null): string {
@@ -49,9 +51,6 @@ export function formatHallOfFameDateTime(isoString?: string | null): string {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
     });
     const parts = formatter.formatToParts(date);
     const getPart = (type: Intl.DateTimeFormatPartTypes) =>
@@ -60,21 +59,16 @@ export function formatHallOfFameDateTime(isoString?: string | null): string {
     const year = getPart('year');
     const month = getPart('month').padStart(2, '0');
     const day = getPart('day').padStart(2, '0');
-    const rawHour = getPart('hour').padStart(2, '0');
-    const hour = rawHour === '24' ? '00' : rawHour;
-    const minute = getPart('minute').padStart(2, '0');
 
-    if (!year || !month || !day || !hour || !minute) return '';
-    return `${year}.${month}.${day} ${hour}:${minute}`;
+    if (!year || !month || !day) return '';
+    return `${year}.${month}.${day}`;
   } catch {
     // Fallback fixed UTC+9 calculation (Asia/Seoul has no DST)
     const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
     const year = kst.getUTCFullYear();
     const month = String(kst.getUTCMonth() + 1).padStart(2, '0');
     const day = String(kst.getUTCDate()).padStart(2, '0');
-    const hour = String(kst.getUTCHours()).padStart(2, '0');
-    const minute = String(kst.getUTCMinutes()).padStart(2, '0');
-    return `${year}.${month}.${day} ${hour}:${minute}`;
+    return `${year}.${month}.${day}`;
   }
 }
 
@@ -161,7 +155,10 @@ function writeLocalEntries(entries: HallOfFameEntry[]): void {
 }
 
 export function normalizeHallOfFameRow(raw: Record<string, unknown>): HallOfFameEntry {
-  const rankVal = (raw.rank_grade ?? raw.rank ?? raw.grade ?? 'C') as VictoryRank;
+  const rawRankCandidate = String(raw.rank_grade ?? raw.rank ?? raw.grade ?? 'C')
+    .trim()
+    .toUpperCase() as VictoryRank;
+  const rankVal: VictoryRank = VALID_VICTORY_RANKS.has(rawRankCandidate) ? rawRankCandidate : 'C';
   const createdAt =
     typeof raw.created_at === 'string' && raw.created_at.trim().length > 0
       ? raw.created_at.trim()

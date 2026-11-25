@@ -10,6 +10,10 @@ interface LordStatusBarProps {
   lubuAlive: boolean;
   lubuCityCount: number;
   lubuEmotion: PortraitEmotion;
+  freeFireReady?: boolean;
+  southeastWindActive?: boolean;
+  remainingFireUses?: number;
+  fireLossPct?: number;
 }
 
 export function LordStatusBar({
@@ -19,6 +23,10 @@ export function LordStatusBar({
   lubuAlive,
   lubuCityCount,
   lubuEmotion,
+  freeFireReady = false,
+  southeastWindActive = false,
+  remainingFireUses = 0,
+  fireLossPct = 30,
 }: LordStatusBarProps) {
   const factionInfo = FACTIONS[playerFaction];
 
@@ -38,7 +46,7 @@ export function LordStatusBar({
           />
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-xs leading-tight">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-tight">
               <span
                 className="font-display font-bold whitespace-nowrap"
                 style={{ color: factionInfo.color }}
@@ -48,9 +56,25 @@ export function LordStatusBar({
               <span aria-hidden="true" className="text-[#a59274]">
                 ·
               </span>
-              <span className="text-[11px] font-medium text-[#6a5c4a] whitespace-nowrap">
-                {factionInfo.traitName}
+              <span className="text-[11px] font-semibold text-[#6a5c4a] whitespace-nowrap">
+                [{factionInfo.traitName}]
               </span>
+              {freeFireReady && (
+                <span
+                  data-testid="hud-free-fire"
+                  className="inline-flex items-center gap-1 rounded border border-[#c94a16]/60 bg-[#fbe9dc] px-1.5 py-0.5 text-[11px] font-bold text-[#9e2a22] whitespace-nowrap"
+                >
+                  🔥 무료 화공 (0 AP · -{fireLossPct}%)
+                </span>
+              )}
+              {southeastWindActive && (
+                <span
+                  data-testid="hud-southeast-wind"
+                  className="inline-flex items-center gap-1 rounded border border-[#b5382a]/55 bg-[#f8e3db] px-1.5 py-0.5 text-[11px] font-bold text-[#8f2419] whitespace-nowrap"
+                >
+                  🌬️ 동남풍 · 화공 {remainingFireUses}회 남음 (+10%p)
+                </span>
+              )}
             </div>
 
             <div
