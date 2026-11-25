@@ -23,6 +23,7 @@ export type MarchRatio = 0.5 | 0.8 | 0.95;
 export type ForecastLevel = '우세' | '박빙' | '열세';
 export type GamePhase = 'splash' | 'lobby' | 'playing' | 'victory' | 'defeat';
 export type VictoryRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E';
+export type FireResultGrade = 'minor' | 'normal' | 'great';
 
 export interface AchievementScoreBreakdown {
   baseScore: number;
@@ -96,7 +97,9 @@ export interface CityBurstEffect {
   cityId: CityId;
   kind: 'fire' | 'clash' | 'recruit' | 'capture' | 'lubu';
   label: string;
+  subLabel?: string;
   color: string;
+  fireGrade?: FireResultGrade;
 }
 
 export type RandomEventType =
@@ -124,7 +127,7 @@ export interface ChronicleEntry {
   turn: number;
   text: string;
   faction?: FactionId;
-  highlight?: 'battle' | 'event' | 'lubu' | 'normal';
+  highlight?: 'battle' | 'event' | 'lubu' | 'great_fire' | 'normal';
 }
 
 export interface GameStats {

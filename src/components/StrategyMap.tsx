@@ -671,27 +671,86 @@ export function StrategyMap({
         <g pointerEvents="none">
           {cityBursts.map((burst) => {
             const city = cities[burst.cityId];
+            const isGreatFire = burst.kind === 'fire' && burst.fireGrade === 'great';
+            const isMinorFire = burst.kind === 'fire' && burst.fireGrade === 'minor';
+
             return (
               <g key={burst.id} transform={`translate(${city.x}, ${city.y})`}>
                 {(burst.kind === 'fire' || burst.kind === 'lubu') && (
-                  <g className="animate-flame-burst">
+                  <g
+                    className="animate-flame-burst"
+                    transform={
+                      isGreatFire ? 'scale(1.22)' : isMinorFire ? 'scale(0.84)' : undefined
+                    }
+                  >
+                    {isGreatFire && (
+                      <>
+                        <circle cx="0" cy="0" r="42" fill="#f59e0b" opacity="0.28" />
+                        <circle
+                          cx="0"
+                          cy="0"
+                          r="36"
+                          fill="none"
+                          stroke="#fde047"
+                          strokeWidth="2.4"
+                          strokeDasharray="6 4"
+                          opacity="0.88"
+                        />
+                        {/* Left & right roaring blaze tongues for 대화재 */}
+                        <path
+                          d="M-16,-24 C-10,-12 -6,-4 -9,9 C-12,18 -20,20 -24,14 C-28,6 -24,-10 -16,-24 Z"
+                          fill="#dc2626"
+                          opacity="0.88"
+                        />
+                        <path
+                          d="M16,-24 C24,-10 28,6 24,14 C20,20 12,18 9,9 C6,-4 10,-12 16,-24 Z"
+                          fill="#dc2626"
+                          opacity="0.88"
+                        />
+                      </>
+                    )}
                     <circle
                       cx="0"
                       cy="0"
-                      r="34"
-                      fill={burst.kind === 'lubu' ? '#7b1fa2' : '#ff6b00'}
-                      opacity="0.32"
+                      r={isGreatFire ? 36 : 34}
+                      fill={
+                        burst.kind === 'lubu'
+                          ? '#7b1fa2'
+                          : isGreatFire
+                            ? '#dc2626'
+                            : isMinorFire
+                              ? '#e07a24'
+                              : '#ff6b00'
+                      }
+                      opacity={isGreatFire ? 0.42 : isMinorFire ? 0.24 : 0.32}
                     />
                     <path
                       d="M0,-32 C10,-18 22,-12 18,4 C15,16 6,22 0,24 C-8,22 -17,14 -18,2 C-20,-10 -8,-18 0,-32 Z"
-                      fill={burst.kind === 'lubu' ? '#b5179e' : '#f94144'}
-                      opacity="0.9"
+                      fill={
+                        burst.kind === 'lubu'
+                          ? '#b5179e'
+                          : isGreatFire
+                            ? '#b91c1c'
+                            : isMinorFire
+                              ? '#d96b27'
+                              : '#f94144'
+                      }
+                      opacity="0.92"
                     />
                     <path
                       d="M0,-22 C7,-11 12,-5 10,5 C8,12 4,16 0,18 C-5,16 -10,11 -10,3 C-11,-5 -5,-12 0,-22 Z"
-                      fill="#ffb703"
-                      opacity="0.95"
+                      fill={isGreatFire ? '#fde047' : '#ffb703'}
+                      opacity="0.96"
                     />
+                    {isGreatFire && (
+                      <g fill="#fef08a" stroke="#b45309" strokeWidth="0.8">
+                        <circle cx="-26" cy="-24" r="3" />
+                        <circle cx="27" cy="-20" r="2.8" />
+                        <circle cx="0" cy="-39" r="3.4" />
+                        <circle cx="-22" cy="18" r="2.4" />
+                        <circle cx="23" cy="16" r="2.5" />
+                      </g>
+                    )}
                   </g>
                 )}
 
@@ -710,20 +769,38 @@ export function StrategyMap({
                 <g className="animate-float-up">
                   <text
                     x="0"
-                    y="-24"
+                    y={burst.subLabel ? -32 : -24}
                     textAnchor="middle"
                     fill={burst.color}
-                    fontSize="14.5"
+                    fontSize={isGreatFire ? '16.5' : '14.5'}
                     fontWeight="900"
                     style={{
                       paintOrder: 'stroke',
-                      stroke: '#fffaf0',
-                      strokeWidth: '4px',
+                      stroke: isGreatFire ? '#fef3c7' : '#fffaf0',
+                      strokeWidth: isGreatFire ? '4.8px' : '4px',
                       strokeLinejoin: 'round',
                     }}
                   >
                     {burst.label}
                   </text>
+                  {burst.subLabel && (
+                    <text
+                      x="0"
+                      y="-16"
+                      textAnchor="middle"
+                      fill={isGreatFire ? '#7f1d1d' : '#4a3520'}
+                      fontSize="11.5"
+                      fontWeight="800"
+                      style={{
+                        paintOrder: 'stroke',
+                        stroke: '#fffaf0',
+                        strokeWidth: '3.4px',
+                        strokeLinejoin: 'round',
+                      }}
+                    >
+                      {burst.subLabel}
+                    </text>
+                  )}
                 </g>
               </g>
             );

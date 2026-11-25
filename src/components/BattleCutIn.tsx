@@ -1,11 +1,12 @@
 import { FACTIONS } from '../game/data';
 import type { PortraitEmotion } from '../game/portraits';
-import type { FactionId } from '../game/types';
+import type { FactionId, FireResultGrade } from '../game/types';
 import { LordPortrait } from './LordPortrait';
 
 export interface BattleCutInData {
   id: string;
   kind: 'capture' | 'defend' | 'fire';
+  fireGrade?: FireResultGrade;
   cityName: string;
   attackerFaction: FactionId;
   defenderFaction: FactionId;
@@ -44,7 +45,22 @@ const ACCENT_BY_KIND: Record<
 export function BattleCutIn({ cutIn, onDismiss }: BattleCutInProps) {
   const attacker = FACTIONS[cutIn.attackerFaction];
   const defender = FACTIONS[cutIn.defenderFaction];
-  const theme = ACCENT_BY_KIND[cutIn.kind];
+  const baseTheme = ACCENT_BY_KIND[cutIn.kind];
+  const isGreatFire = cutIn.kind === 'fire' && cutIn.fireGrade === 'great';
+  const isMinorFire = cutIn.kind === 'fire' && cutIn.fireGrade === 'minor';
+  const theme = isGreatFire
+    ? {
+        border: '#eab63e',
+        badgeBg: 'rgba(185, 28, 28, 0.42)',
+        headlineColor: '#ffe38e',
+      }
+    : isMinorFire
+      ? {
+          border: '#c26c24',
+          badgeBg: 'rgba(194, 108, 36, 0.22)',
+          headlineColor: '#f5c088',
+        }
+      : baseTheme;
 
   return (
     <div
@@ -57,8 +73,14 @@ export function BattleCutIn({ cutIn, onDismiss }: BattleCutInProps) {
         title="클릭하여 닫기"
         data-testid="battle-cutin"
         data-kind={cutIn.kind}
+        data-fire-grade={cutIn.fireGrade}
         className="battle-cutin-enter pointer-events-auto flex w-full max-w-[356px] cursor-pointer items-center justify-between gap-2 rounded-lg border-2 bg-[#221c16]/95 px-2.5 py-2 text-left text-[#faf3e3] shadow-xl backdrop-blur-[2px] transition-opacity hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ecd8] sm:max-w-[404px] sm:gap-3 sm:px-3.5 sm:py-2.5"
-        style={{ borderColor: theme.border }}
+        style={{
+          borderColor: theme.border,
+          boxShadow: isGreatFire
+            ? '0 10px 26px rgba(153, 27, 27, 0.45), 0 0 18px rgba(234, 182, 62, 0.4)'
+            : undefined,
+        }}
       >
         {/* Left: Attacker Portrait */}
         <div className="flex shrink-0 flex-col items-center">

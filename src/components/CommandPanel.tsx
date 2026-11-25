@@ -3,7 +3,7 @@ import { FACTIONS, MIN_GARRISON_TROOPS } from '../game/data';
 import {
   canUseFireAttack,
   getFireApCost,
-  getFireLossRate,
+  getFireDamageRange,
   getRecruitAmount,
   getSendTroops,
 } from '../game/engine';
@@ -78,7 +78,8 @@ export function CommandPanel({
       : false;
   const fireCost = getFireApCost(playerFaction, fireUsesThisTurn);
   const remainingFireUses = Math.max(0, maxFireUsesThisTurn - fireUsesThisTurn);
-  const fireLossPct = Math.round(getFireLossRate(playerFaction, fireBonusRateThisTurn) * 100);
+  const fireRange = getFireDamageRange(fireBonusRateThisTurn);
+  const fireRangeText = `-${fireRange.minPct}~${fireRange.maxPct}%`;
   const isFreeFireAvailable = remainingFireUses > 0 && fireCost === 0;
   const canFire =
     !isAiTurn &&
@@ -143,7 +144,7 @@ export function CommandPanel({
           <span className="font-medium">
             {commandMode === 'march'
               ? `지도에서 출진·수송할 인접 성지를 선택하세요 (${sendPreview}명 파병)`
-              : `지도에서 화공을 펼칠 인접 적 성지를 선택하세요 (${fireCost} AP · -${fireLossPct}%${
+              : `지도에서 화공을 펼칠 인접 적 성지를 선택하세요 (${fireCost} AP · ${fireRangeText}${
                   maxFireUsesThisTurn > 1 ? ` · ${remainingFireUses}회 남음` : ''
                 })`}
           </span>
@@ -217,10 +218,14 @@ export function CommandPanel({
             className={`h-4 w-4 ${commandMode === 'fire' ? 'text-white' : 'text-[#c94a16]'}`}
             aria-hidden="true"
           />
-          <span className="text-xs font-bold whitespace-nowrap">화공</span>
+          <span className="text-xs font-bold whitespace-nowrap">
+            {maxFireUsesThisTurn > 1 && remainingFireUses > 0
+              ? `화공 · ${remainingFireUses}회`
+              : '화공'}
+          </span>
           <span
             data-testid="cmd-fire-meta"
-            className={`tabular-nums text-[10.5px] font-medium leading-tight ${
+            className={`tabular-nums text-[10.5px] font-medium leading-tight whitespace-nowrap ${
               commandMode === 'fire'
                 ? 'text-white/95'
                 : isFreeFireAvailable && canFire
@@ -228,11 +233,7 @@ export function CommandPanel({
                   : 'text-[#5c4f3d]'
             }`}
           >
-            {remainingFireUses <= 0
-              ? '사용 완료'
-              : `${fireCost} AP · -${fireLossPct}%${
-                  maxFireUsesThisTurn > 1 ? ` (${remainingFireUses}회 남음)` : ''
-                }`}
+            {remainingFireUses <= 0 ? '사용 완료' : `${fireCost} AP · ${fireRangeText}`}
           </span>
         </button>
       </div>
@@ -310,14 +311,20 @@ export function CommandPanel({
             <li
               key={entry.id}
               className={`flex items-start gap-1.5 ${
-                entry.highlight === 'lubu'
-                  ? 'font-semibold text-[#581c5c]'
-                  : entry.highlight === 'event'
-                    ? 'font-medium text-[#8c4b14]'
-                    : 'text-[#43392c]'
+                entry.highlight === 'great_fire'
+                  ? 'rounded border border-[#e3b24c]/80 bg-[#fcecd5]/90 px-1.5 py-1 font-bold text-[#9e1c14]'
+                  : entry.highlight === 'lubu'
+                    ? 'font-semibold text-[#581c5c]'
+                    : entry.highlight === 'event'
+                      ? 'font-medium text-[#8c4b14]'
+                      : 'text-[#43392c]'
               }`}
             >
-              <span className="tabular-nums shrink-0 font-semibold text-[#7a6b56]">
+              <span
+                className={`tabular-nums shrink-0 font-semibold ${
+                  entry.highlight === 'great_fire' ? 'text-[#b45309]' : 'text-[#7a6b56]'
+                }`}
+              >
                 {entry.turn}T
               </span>
               <span>{entry.text}</span>

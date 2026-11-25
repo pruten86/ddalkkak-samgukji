@@ -28,7 +28,7 @@ import {
   executeRecruit,
   formatEliminationRewardMessage,
   getFireApCost,
-  getFireLossRate,
+  getFireDamageRange,
   getOwnedCities,
   hasDefeatedLuBu,
   isMajorEliminationReward,
@@ -199,10 +199,11 @@ export default function App() {
       kind: CityBurstEffect['kind'],
       label: string,
       color: string,
-      duration = 1100
+      duration = 1100,
+      extras?: Pick<CityBurstEffect, 'subLabel' | 'fireGrade'>
     ) => {
       const id = uid('burst');
-      setCityBursts((prev) => [...prev, { id, cityId, kind, label, color }]);
+      setCityBursts((prev) => [...prev, { id, cityId, kind, label, color, ...extras }]);
       window.setTimeout(() => {
         setCityBursts((prev) => prev.filter((b) => b.id !== id));
       }, duration);
@@ -543,27 +544,69 @@ export default function App() {
 
         const lossPct = Math.round(res.lossRate * 100);
         const costTag = fireCost === 0 ? '무료 0 AP' : '1 AP';
+        const firePresentation =
+          res.grade === 'great'
+            ? {
+                burstLabel: `대화재! -${lossPct}%`,
+                burstColor: '#b91c1c',
+                burstDuration: 1550,
+                cutInHeadline: `🔥🔥 ${target.name} 대화재! -${lossPct}%`,
+                cutInSubline: `맹렬한 화마로 적 병력 -${res.troopsLost}명 괴멸! (${costTag})`,
+                logText: `🔥 [대화재!] ${selected.name} → ${target.name} 화공 대성공(-${lossPct}%, ${costTag})! 적 병력 ${res.troopsLost}명을 불태웠습니다!`,
+                logHighlight: 'great_fire' as const,
+              }
+            : res.grade === 'minor'
+              ? {
+                  burstLabel: `화공(소규모) -${lossPct}%`,
+                  burstColor: '#c9641c',
+                  burstDuration: 1250,
+                  cutInHeadline: `🔥 ${target.name} 화공(소규모) -${lossPct}%`,
+                  cutInSubline: `적 병력 -${res.troopsLost}명 감소 (${costTag})`,
+                  logText: `${selected.name} → ${target.name} 화공(소규모 -${lossPct}%, ${costTag})으로 적 병력 ${res.troopsLost}명을 줄였습니다.`,
+                  logHighlight: 'battle' as const,
+                }
+              : {
+                  burstLabel: `화공 성공 -${lossPct}%`,
+                  burstColor: '#d9480f',
+                  burstDuration: 1300,
+                  cutInHeadline: `🔥 ${target.name} 화공 성공! -${lossPct}%`,
+                  cutInSubline: `적 병력 -${res.troopsLost}명 소멸 (${costTag})`,
+                  logText: `${selected.name} → ${target.name} 화공 성공(-${lossPct}%, ${costTag})! 적 병력 ${res.troopsLost}명을 소멸시켰습니다.`,
+                  logHighlight: 'battle' as const,
+                };
+
         sound.playFire();
         triggerShake();
-        spawnBurst(targetId, 'fire', `화공 -${res.troopsLost}`, '#d9480f', 1200);
+        spawnBurst(
+          targetId,
+          'fire',
+          firePresentation.burstLabel,
+          firePresentation.burstColor,
+          firePresentation.burstDuration,
+          {
+            subLabel: `-${res.troopsLost}명`,
+            fireGrade: res.grade,
+          }
+        );
         triggerLordReaction('fire', 'fire', 1600);
         showBattleCutIn({
           kind: 'fire',
+          fireGrade: res.grade,
           cityName: target.name,
           attackerFaction: cur.playerFaction,
           defenderFaction: target.owner,
           attackerEmotion: 'fire',
           defenderEmotion: 'defeat',
-          headline: `🔥 ${target.name} 화공 적중!`,
-          subline: `적 병력 -${res.troopsLost}명 소멸 (-${lossPct}% · ${costTag})`,
+          headline: firePresentation.cutInHeadline,
+          subline: firePresentation.cutInSubline,
         });
 
         const logEntry: ChronicleEntry = {
           id: uid('log'),
           turn: cur.turn,
-          text: `${selected.name}에서 ${target.name}에 화공(${costTag}, -${lossPct}%)을 펼쳐 적 병력 ${res.troopsLost}명을 소멸시켰습니다!`,
+          text: firePresentation.logText,
           faction: cur.playerFaction,
-          highlight: 'battle',
+          highlight: firePresentation.logHighlight,
         };
 
         setState((prev) => ({
@@ -920,9 +963,8 @@ export default function App() {
     [state.cities, state.playerFaction]
   );
   const remainingFireUses = Math.max(0, state.maxFireUsesThisTurn - state.fireUsesThisTurn);
-  const fireLossPct = Math.round(
-    getFireLossRate(state.playerFaction, state.fireBonusRateThisTurn) * 100
-  );
+  const fireRange = getFireDamageRange(state.fireBonusRateThisTurn);
+  const fireDamageRangeText = `${fireRange.minPct}~${fireRange.maxPct}%`;
   const freeFireReady =
     remainingFireUses > 0 && getFireApCost(state.playerFaction, state.fireUsesThisTurn) === 0;
   const southeastWindActive = state.maxFireUsesThisTurn > BASE_MAX_FIRE_USES;
@@ -1121,7 +1163,7 @@ export default function App() {
         freeFireReady={freeFireReady}
         southeastWindActive={southeastWindActive}
         remainingFireUses={remainingFireUses}
-        fireLossPct={fireLossPct}
+        fireDamageRangeText={fireDamageRangeText}
       />
 
       {/* Main Playfield */}

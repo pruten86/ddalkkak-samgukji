@@ -4,6 +4,11 @@ import {
   BASE_MAX_FIRE_USES,
   BASE_RECRUIT_TROOPS,
   FACTIONS,
+  FIRE_GREAT_LOSS_RATE,
+  FIRE_MINOR_LOSS_RATE,
+  FIRE_NORMAL_LOSS_RATE,
+  FIRE_NORMAL_MINOR_THRESHOLD,
+  FIRE_WIND_GREAT_THRESHOLD,
   INITIAL_CITIES,
   LUOYANG_DEFENSE_BONUS,
   LUOYANG_TURN_BONUS,
@@ -22,6 +27,7 @@ import type {
   CityId,
   CityState,
   FactionId,
+  FireResultGrade,
   ForecastLevel,
   GameEventModalData,
   GamePhase,
@@ -144,11 +150,81 @@ export function canUseFireAttack(
 }
 
 /**
- * Computes effective fire attack troop loss rate (0.30 base + bonus rate such as 0.10 Southeast Wind = 0.40) for all factions.
+ * Computes effective baseline fire attack troop loss rate (0.30 base + bonus rate such as 0.10 Southeast Wind = 0.40).
  */
 export function getFireLossRate(_faction: FactionId, fireBonusRate = 0): number {
   const bonus = Math.max(0, fireBonusRate);
   return Math.min(0.8, Number((BASE_FIRE_LOSS_RATE + bonus).toFixed(2)));
+}
+
+/**
+ * Returns the min/max damage range for fire attacks on the current turn.
+ * - Normal turn: 20% ~ 30% (minor 20%, normal 30%; great fire excluded)
+ * - Southeast Wind turn (fireBonusRate > 0): 40% ~ 55% (minor excluded; normal 40%, great 55%)
+ */
+export function getFireDamageRange(fireBonusRate = 0): {
+  minRate: number;
+  maxRate: number;
+  minPct: number;
+  maxPct: number;
+} {
+  const bonus = Math.max(0, fireBonusRate);
+  if (bonus > 0) {
+    const minRate = Math.min(0.8, Number((FIRE_NORMAL_LOSS_RATE + bonus).toFixed(2)));
+    const maxRate = Math.min(0.8, Number((FIRE_GREAT_LOSS_RATE + bonus).toFixed(2)));
+    return {
+      minRate,
+      maxRate,
+      minPct: Math.round(minRate * 100),
+      maxPct: Math.round(maxRate * 100),
+    };
+  }
+  return {
+    minRate: FIRE_MINOR_LOSS_RATE,
+    maxRate: FIRE_NORMAL_LOSS_RATE,
+    minPct: Math.round(FIRE_MINOR_LOSS_RATE * 100),
+    maxPct: Math.round(FIRE_NORMAL_LOSS_RATE * 100),
+  };
+}
+
+/**
+ * Rolls a fire attack outcome:
+ * - Normal turn: minor (30% -> 20%), normal (70% -> 30%), great (0% — excluded)
+ * - Southeast Wind (fireBonusRate > 0): minor (0% — excluded), normal (70% -> 40%), great (30% -> 55%)
+ */
+export function rollFireOutcome(
+  fireBonusRate = 0,
+  rng: RngFn = Math.random
+): {
+  grade: FireResultGrade;
+  lossRate: number;
+} {
+  const bonus = Math.max(0, fireBonusRate);
+  const roll = rng();
+
+  if (bonus > 0) {
+    if (roll < FIRE_WIND_GREAT_THRESHOLD) {
+      return {
+        grade: 'normal',
+        lossRate: Math.min(0.8, Number((FIRE_NORMAL_LOSS_RATE + bonus).toFixed(2))),
+      };
+    }
+    return {
+      grade: 'great',
+      lossRate: Math.min(0.8, Number((FIRE_GREAT_LOSS_RATE + bonus).toFixed(2))),
+    };
+  }
+
+  if (roll < FIRE_NORMAL_MINOR_THRESHOLD) {
+    return {
+      grade: 'minor',
+      lossRate: FIRE_MINOR_LOSS_RATE,
+    };
+  }
+  return {
+    grade: 'normal',
+    lossRate: FIRE_NORMAL_LOSS_RATE,
+  };
 }
 
 export function getSendTroops(sourceTroops: number, ratio: MarchRatio): number {
@@ -285,11 +361,13 @@ export function executeFireAttack(
   cities: Record<CityId, CityState>,
   fromId: CityId,
   toId: CityId,
-  fireBonusRate = 0
+  fireBonusRate = 0,
+  rng: RngFn = Math.random
 ): {
   cities: Record<CityId, CityState>;
   troopsLost: number;
   lossRate: number;
+  grade: FireResultGrade;
 } | null {
   const source = cities[fromId];
   const target = cities[toId];
@@ -298,7 +376,7 @@ export function executeFireAttack(
   if (source.owner === target.owner) return null;
 
   const next = cloneCities(cities);
-  const lossRate = getFireLossRate(source.owner, fireBonusRate);
+  const { grade, lossRate } = rollFireOutcome(fireBonusRate, rng);
   const rawLoss = Math.max(1, Math.round(target.troops * lossRate));
   const actualRemaining = Math.max(1, target.troops - rawLoss);
   const troopsLost = target.troops - actualRemaining;
@@ -308,6 +386,7 @@ export function executeFireAttack(
     cities: next,
     troopsLost,
     lossRate,
+    grade,
   };
 }
 
@@ -502,10 +581,8 @@ export function triggerThreeTurnEvent(
   }
 
   if (roll === 1) {
-    // 적벽의 동남풍: AP +1, maxFireUsesThisTurn = 2, fireBonusRateThisTurn = +0.10 (40% for all factions)
-    const enhancedPct = Math.round(
-      getFireLossRate(playerFaction, SOUTHEAST_WIND_FIRE_BONUS) * 100
-    );
+    // 적벽의 동남풍: AP +1, maxFireUsesThisTurn = 2, 소규모 제외 + 각 +10%p (40% 성공 / 55% 대화재)
+    const range = getFireDamageRange(SOUTHEAST_WIND_FIRE_BONUS);
     return {
       cities: next,
       bonusAp: 1,
@@ -516,11 +593,11 @@ export function triggerThreeTurnEvent(
         title: '적벽의 동남풍',
         subtitle: '3턴 주기 돌발 사건',
         description:
-          '순풍이 불어옵니다! 이번 턴 행동력 +1, 화공 2회 사용 가능, 화공 피해량 +10% 증가!',
+          '순풍이 불어옵니다! 이번 턴 행동력 +1, 화공 2회 사용 가능! 소규모 판정이 제외되어 성공(-40%) 또는 대화재(-55%)가 발동합니다!',
         effectSummary:
           playerFaction === 'wu'
-            ? `행동력 +1 · 화공 2회 (1타 0 AP / 2타 1 AP) · 화공 피해 ${enhancedPct}%`
-            : `행동력 +1 · 화공 2회 (회당 1 AP) · 화공 피해 ${enhancedPct}%`,
+            ? `행동력 +1 · 화공 2회 (1타 0 AP / 2타 1 AP) · 피해 -${range.minPct}~${range.maxPct}%`
+            : `행동력 +1 · 화공 2회 (회당 1 AP) · 피해 -${range.minPct}~${range.maxPct}%`,
         accentColor: '#b5382a',
       },
     };

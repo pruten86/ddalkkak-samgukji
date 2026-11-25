@@ -722,8 +722,11 @@ export function RulesModal({ onClose }: RulesModalProps) {
                 <strong>출진 / 수송 (1 AP)</strong>: 인접 성지로 병력의 50% / 80% / 95%를 파병 (최소 5명 잔류).
               </li>
               <li>
-                <strong>화공 계략 (턴당 1회)</strong>: 인접 적 성지 병력의 30%를 즉시 소멸시킵니다
-                (회당 1 AP · 오 세력은 첫 화공 0 AP · 동남풍 발동 시 2회 사용 및 피해 40%).
+                <strong>화공 계략 (턴당 1회)</strong>: 인접 적 성지에 화공을 펼쳐 병력을
+                소멸시킵니다 — 평상시 소규모(30%) <strong>-20%</strong> · 성공(70%){' '}
+                <strong>-30%</strong> (회당 1 AP · 오 세력은 첫 화공 0 AP).{' '}
+                <strong>「적벽의 동남풍」</strong> 발동 시에만 2회 사용 가능하며 소규모가 제외되어
+                성공(70%) <strong>-40%</strong> · 대화재(30%) <strong>-55%</strong>가 발동합니다.
               </li>
               <li>
                 <strong>황성 낙양</strong>: 점령 세력에게 매 턴 추가 병력 +20, 낙양 수성 시 방어력 +10%.

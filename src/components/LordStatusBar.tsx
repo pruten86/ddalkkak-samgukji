@@ -13,7 +13,7 @@ interface LordStatusBarProps {
   freeFireReady?: boolean;
   southeastWindActive?: boolean;
   remainingFireUses?: number;
-  fireLossPct?: number;
+  fireDamageRangeText?: string;
 }
 
 export function LordStatusBar({
@@ -26,7 +26,7 @@ export function LordStatusBar({
   freeFireReady = false,
   southeastWindActive = false,
   remainingFireUses = 0,
-  fireLossPct = 30,
+  fireDamageRangeText = '20~30%',
 }: LordStatusBarProps) {
   const factionInfo = FACTIONS[playerFaction];
 
@@ -64,7 +64,7 @@ export function LordStatusBar({
                   data-testid="hud-free-fire"
                   className="inline-flex items-center gap-1 rounded border border-[#c94a16]/60 bg-[#fbe9dc] px-1.5 py-0.5 text-[11px] font-bold text-[#9e2a22] whitespace-nowrap"
                 >
-                  🔥 무료 화공 (0 AP · -{fireLossPct}%)
+                  🔥 무료 화공 (0 AP · -{fireDamageRangeText})
                 </span>
               )}
               {southeastWindActive && (
@@ -72,7 +72,7 @@ export function LordStatusBar({
                   data-testid="hud-southeast-wind"
                   className="inline-flex items-center gap-1 rounded border border-[#b5382a]/55 bg-[#f8e3db] px-1.5 py-0.5 text-[11px] font-bold text-[#8f2419] whitespace-nowrap"
                 >
-                  🌬️ 동남풍 · 화공 {remainingFireUses}회 남음 (+10%p)
+                  🌬️ 동남풍 · 화공 {remainingFireUses}회 남음 (-{fireDamageRangeText})
                 </span>
               )}
             </div>
