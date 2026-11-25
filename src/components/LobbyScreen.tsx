@@ -112,10 +112,16 @@ export function LobbyScreen({
             </div>
           </div>
 
-          <p className="mb-6 max-w-xl text-sm leading-relaxed text-[#473d31] sm:text-base">
-            위·촉·오 세 군웅 중 하나의 깃발을 들고 15개 성지를 통일하세요.
-            천하를 평정하면 명예의 전당에 이름을 새길 수 있습니다.
-          </p>
+          <div
+            data-testid="lobby-intro-copy"
+            className="mb-6 max-w-2xl space-y-0.5 text-sm leading-relaxed text-[#473d31] break-keep text-pretty sm:text-base"
+          >
+            <p>위·촉·오 세 군웅 중 하나의 깃발을 들고 15개 성지를 통일하세요.</p>
+            <p>
+              천하를 평정하면{' '}
+              <span className="whitespace-nowrap">명예의 전당에</span> 이름을 새길 수 있습니다.
+            </p>
+          </div>
 
           {/* 3 Factions + Hall of Fame Card Grid */}
           <div className="mb-7 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px]">
