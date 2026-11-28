@@ -171,7 +171,7 @@ export const LORD_DIALOGUES: Record<PlayableFactionId, Record<LordReactionTrigge
   },
   wu: {
     idle: [
-      '강동의 철벽 수성으로 버티고, 무료 화공으로 적의 기세를 꺾으리라.',
+      '강동의 철벽 수성으로 버티고, 화공으로 적의 기세를 꺾으리라.',
       '장강을 방패 삼아 굳건히 지키고 화공으로 승부를 가르자.',
       '성벽은 든든하니 화공으로 적진을 흔든 뒤 진군하라.',
     ],

@@ -543,7 +543,7 @@ export default function App() {
         if (!res) return;
 
         const lossPct = Math.round(res.lossRate * 100);
-        const costTag = fireCost === 0 ? '무료 0 AP' : '1 AP';
+        const costTag = fireCost === 0 ? '0 AP' : '1 AP';
         const firePresentation =
           res.grade === 'great'
             ? {
@@ -965,8 +965,7 @@ export default function App() {
   const remainingFireUses = Math.max(0, state.maxFireUsesThisTurn - state.fireUsesThisTurn);
   const fireRange = getFireDamageRange(state.fireBonusRateThisTurn);
   const fireDamageRangeText = `${fireRange.minPct}~${fireRange.maxPct}%`;
-  const freeFireReady =
-    remainingFireUses > 0 && getFireApCost(state.playerFaction, state.fireUsesThisTurn) === 0;
+  const nextFireApCost = getFireApCost(state.playerFaction, state.fireUsesThisTurn);
   const southeastWindActive = state.maxFireUsesThisTurn > BASE_MAX_FIRE_USES;
 
   // Stage 1: Full-screen Splash Screen
@@ -1160,15 +1159,15 @@ export default function App() {
         lubuAlive={state.lubuSpawned && counts.lubu > 0}
         lubuCityCount={counts.lubu}
         lubuEmotion={lubuEmotion}
-        freeFireReady={freeFireReady}
+        fireApCost={nextFireApCost}
         southeastWindActive={southeastWindActive}
         remainingFireUses={remainingFireUses}
         fireDamageRangeText={fireDamageRangeText}
       />
 
       {/* Main Playfield */}
-      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 items-start gap-4 px-3 py-3 pb-8 sm:px-5 lg:grid-cols-[minmax(0,1fr)_336px] lg:gap-5 lg:py-4">
-        <div className="relative w-full pb-2 sm:pb-3 lg:pb-0">
+      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 items-start gap-2.5 px-1 py-1.5 pb-8 sm:gap-4 sm:px-5 sm:py-3 lg:grid-cols-[minmax(0,1fr)_336px] lg:gap-5 lg:py-4">
+        <div className="relative w-full pb-0.5 sm:pb-3 lg:pb-0">
           {battleCutIn && (
             <BattleCutIn
               key={battleCutIn.id}
@@ -1189,26 +1188,28 @@ export default function App() {
           />
         </div>
 
-        <CommandPanel
-          selectedCity={selectedCity}
-          cities={state.cities}
-          playerFaction={state.playerFaction}
-          ap={state.ap}
-          commandMode={state.commandMode}
-          marchRatio={state.marchRatio}
-          fireUsesThisTurn={state.fireUsesThisTurn}
-          maxFireUsesThisTurn={state.maxFireUsesThisTurn}
-          fireBonusRateThisTurn={state.fireBonusRateThisTurn}
-          isAiTurn={state.isAiTurn}
-          activeAiFaction={state.activeAiFaction}
-          chronicle={state.chronicle}
-          onRecruit={handleRecruit}
-          onToggleMarchMode={handleToggleMarchMode}
-          onToggleFireMode={handleToggleFireMode}
-          onChangeMarchRatio={handleChangeMarchRatio}
-          onCancelMode={handleCancelMode}
-          onEndTurn={handleRequestEndTurn}
-        />
+        <div className="px-1.5 sm:px-0">
+          <CommandPanel
+            selectedCity={selectedCity}
+            cities={state.cities}
+            playerFaction={state.playerFaction}
+            ap={state.ap}
+            commandMode={state.commandMode}
+            marchRatio={state.marchRatio}
+            fireUsesThisTurn={state.fireUsesThisTurn}
+            maxFireUsesThisTurn={state.maxFireUsesThisTurn}
+            fireBonusRateThisTurn={state.fireBonusRateThisTurn}
+            isAiTurn={state.isAiTurn}
+            activeAiFaction={state.activeAiFaction}
+            chronicle={state.chronicle}
+            onRecruit={handleRecruit}
+            onToggleMarchMode={handleToggleMarchMode}
+            onToggleFireMode={handleToggleFireMode}
+            onChangeMarchRatio={handleChangeMarchRatio}
+            onCancelMode={handleCancelMode}
+            onEndTurn={handleRequestEndTurn}
+          />
+        </div>
       </main>
 
       {/* Remaining AP End-Turn Confirmation Modal */}

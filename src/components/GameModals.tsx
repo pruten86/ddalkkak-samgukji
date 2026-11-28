@@ -745,7 +745,7 @@ export function RulesModal({ onClose }: RulesModalProps) {
               </li>
               <li>
                 <strong style={{ color: FACTIONS.wu.color }}>오(손권)</strong> — [수성] 방어력 +20%,
-                턴당 첫 화공 0 AP(무료)
+                턴당 첫 화공 0 AP
               </li>
               <li>
                 <strong style={{ color: FACTIONS.lubu.color }}>여포군</strong> — [무쌍] 공격 +35%, 방어 +10%, 징병 +15%

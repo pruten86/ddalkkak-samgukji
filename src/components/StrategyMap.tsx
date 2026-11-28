@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ALL_CITY_IDS, FACTIONS } from '../game/data';
 import { getCombatForecast } from '../game/engine';
 import type {
@@ -89,6 +89,32 @@ const HANJI_FIBERS = [
   'M590,262 Q604,265 616,260',
 ];
 
+const DESKTOP_VIEWBOX = { x: 0, y: 0, w: 800, h: 550 } as const;
+// Tightly framed around all 15 cities (x: 150..680, y: 70..465) with clean label & burst clearance
+const MOBILE_VIEWBOX = { x: 102, y: 18, w: 620, h: 506 } as const;
+
+function useIsMobileMap(): boolean {
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    return window.matchMedia('(max-width: 639px)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia('(max-width: 639px)');
+    const sync = () => setIsMobile(mql.matches);
+    sync();
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', sync);
+      return () => mql.removeEventListener('change', sync);
+    }
+    mql.addListener(sync);
+    return () => mql.removeListener(sync);
+  }, []);
+
+  return isMobile;
+}
+
 export function StrategyMap({
   cities,
   playerFaction,
@@ -100,6 +126,9 @@ export function StrategyMap({
   shakeMap,
   onSelectCity,
 }: StrategyMapProps) {
+  const isMobile = useIsMobileMap();
+  const vb = isMobile ? MOBILE_VIEWBOX : DESKTOP_VIEWBOX;
+
   // Unique undirected road edges
   const roads = useMemo(() => {
     const seen = new Set<string>();
@@ -149,16 +178,18 @@ export function StrategyMap({
   return (
     <div
       data-testid="strategy-map-container"
-      className={`relative w-full overflow-hidden rounded-lg border border-[#bda884] bg-[#f4ead5] shadow-sm ${
+      className={`relative w-full overflow-hidden rounded-md border border-[#bda884] bg-[#f4ead5] shadow-sm sm:rounded-lg ${
         shakeMap ? 'animate-map-shake' : ''
       }`}
     >
       <svg
-        viewBox="0 0 800 550"
-        className="block h-auto w-full select-none"
+        viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+        preserveAspectRatio="xMidYMid meet"
+        className="block h-auto min-h-[296px] w-full select-none sm:min-h-0"
         role="img"
         aria-label="삼국지 15개 성지 전략 고지도"
         data-testid="strategy-map-svg"
+        data-mobile-view={isMobile ? 'true' : 'false'}
       >
         <defs>
           {/* Parchment radial vignette */}
@@ -233,22 +264,22 @@ export function StrategyMap({
           <path d="M750,410 Q758,405 766,410 T782,410" />
         </g>
 
-        {/* Antique Cartography Scroll Frame */}
+        {/* Antique Cartography Scroll Frame — adapts cleanly to mobile cropped viewBox */}
         <rect
-          x="10"
-          y="10"
-          width="780"
-          height="530"
+          x={vb.x + (isMobile ? 7 : 10)}
+          y={vb.y + (isMobile ? 7 : 10)}
+          width={vb.w - (isMobile ? 14 : 20)}
+          height={vb.h - (isMobile ? 14 : 20)}
           fill="none"
           stroke="#9e8a67"
-          strokeWidth="1.4"
+          strokeWidth={isMobile ? 1.2 : 1.4}
           opacity="0.65"
         />
         <rect
-          x="15"
-          y="15"
-          width="770"
-          height="520"
+          x={vb.x + (isMobile ? 11 : 15)}
+          y={vb.y + (isMobile ? 11 : 15)}
+          width={vb.w - (isMobile ? 22 : 30)}
+          height={vb.h - (isMobile ? 22 : 30)}
           fill="none"
           stroke="#b39f7c"
           strokeWidth="0.7"
@@ -256,8 +287,12 @@ export function StrategyMap({
           opacity="0.5"
         />
 
-        {/* Traditional Cartographic Compass Emblem (top-left quiet corner) */}
-        <g transform="translate(64, 66)" opacity="0.6" aria-hidden="true">
+        {/* Traditional Cartographic Compass Emblem (tucked smaller in quiet corner on mobile) */}
+        <g
+          transform={isMobile ? 'translate(136, 62) scale(0.72)' : 'translate(64, 66)'}
+          opacity={isMobile ? 0.48 : 0.6}
+          aria-hidden="true"
+        >
           <circle cx="0" cy="0" r="24" fill="none" stroke="#857358" strokeWidth="1" />
           <circle cx="0" cy="0" r="19" fill="none" stroke="#857358" strokeWidth="0.6" strokeDasharray="2 2" />
           <polygon points="0,-18 4,-4 0,-7 -4,-4" fill="#8b2e24" />
@@ -313,13 +348,13 @@ export function StrategyMap({
             opacity="0.45"
           />
           <text
-            x="165"
-            y="100"
-            fontSize="12"
+            x={isMobile ? 210 : 165}
+            y={isMobile ? 102 : 100}
+            fontSize={isMobile ? 11 : 12}
             fontFamily="'Noto Serif KR', serif"
             fontWeight="700"
             fill="#7a6845"
-            opacity="0.82"
+            opacity={isMobile ? 0.68 : 0.82}
           >
             황하
           </text>
@@ -343,13 +378,13 @@ export function StrategyMap({
             opacity="0.48"
           />
           <text
-            x="248"
-            y="374"
-            fontSize="12"
+            x={isMobile ? 236 : 248}
+            y={isMobile ? 378 : 374}
+            fontSize={isMobile ? 11 : 12}
             fontFamily="'Noto Serif KR', serif"
             fontWeight="700"
             fill="#3f6573"
-            opacity="0.85"
+            opacity={isMobile ? 0.7 : 0.85}
           >
             장강
           </text>
@@ -374,9 +409,9 @@ export function StrategyMap({
                   x2={to.x}
                   y2={to.y}
                   stroke={isHighlighted ? highlightColor : '#83725a'}
-                  strokeWidth={isHighlighted ? 3.2 : 1.9}
+                  strokeWidth={isHighlighted ? (isMobile ? 4.2 : 3.2) : isMobile ? 2.1 : 1.9}
                   strokeDasharray={isHighlighted ? '7 4' : '5 5'}
-                  strokeOpacity={isHighlighted ? 0.92 : 0.56}
+                  strokeOpacity={isHighlighted ? 0.95 : 0.54}
                   strokeLinecap="round"
                   className={isHighlighted ? 'animate-march-dash' : undefined}
                 />
@@ -450,7 +485,24 @@ export function StrategyMap({
             const isSelected = selectedCityId === id;
             const targetMeta = validTargets.get(id);
             const isImperial = city.isImperial;
-            const radius = isImperial ? 21 : 18.5;
+            const radius = isMobile
+              ? isImperial
+                ? 25.5
+                : 22.5
+              : isImperial
+                ? 21
+                : 18.5;
+            const hitRadius = isMobile ? radius + 11 : 28;
+            const ringRadius = radius + (isMobile ? 7.5 : 6);
+            const imperialOuterRadius = radius + (isMobile ? 4.8 : 4);
+            const troopFontSize = isMobile ? (isImperial ? 18.5 : 17.5) : 14;
+            const troopTextY = isMobile ? 6.2 : 5;
+            const nameFontSize = isMobile ? (isImperial ? 17.5 : 17) : 14;
+            const nameTextY = isMobile ? (isImperial ? 46 : 41) : isImperial ? 37 : 34;
+            const targetBadgeY = isMobile ? (isImperial ? -46 : -38) : isImperial ? -38 : -31;
+            const badgeW = isMobile ? 48 : 40;
+            const badgeH = isMobile ? 22 : 18;
+            const badgeFontSize = isMobile ? 13 : 10.5;
 
             const ariaLabel = `${city.name} (${faction.shortName}, 병력 ${city.troops}${
               isImperial ? ', 황성' : ''
@@ -473,19 +525,25 @@ export function StrategyMap({
                 }}
                 className="cursor-pointer focus:outline-none"
               >
-                {/* Invisible generous hit area for mobile finger tap */}
-                <circle cx="0" cy="0" r="28" fill="transparent" />
+                {/* Invisible generous hit area for accurate finger tap */}
+                <circle
+                  cx="0"
+                  cy="0"
+                  r={hitRadius}
+                  fill="transparent"
+                  data-testid={`city-hit-${id}`}
+                />
 
                 {/* Selection or Target Pulsing Halo */}
                 {isSelected && (
                   <circle
                     cx="0"
                     cy="0"
-                    r={radius + 6}
+                    r={ringRadius}
                     fill="none"
-                    stroke="#231f1a"
-                    strokeWidth="2.6"
-                    strokeDasharray="4 3"
+                    stroke="#1c1712"
+                    strokeWidth={isMobile ? 3.6 : 2.6}
+                    strokeDasharray={isMobile ? '5 3.5' : '4 3'}
                   />
                 )}
 
@@ -493,7 +551,7 @@ export function StrategyMap({
                   <circle
                     cx="0"
                     cy="0"
-                    r={radius + 6}
+                    r={ringRadius}
                     fill="none"
                     stroke={
                       targetMeta.kind === 'fire'
@@ -502,7 +560,7 @@ export function StrategyMap({
                           ? '#2e7d4f'
                           : '#c92a2a'
                     }
-                    strokeWidth="2.8"
+                    strokeWidth={isMobile ? 3.8 : 2.8}
                     className="animate-ring-pulse"
                   />
                 )}
@@ -513,16 +571,20 @@ export function StrategyMap({
                     <circle
                       cx="0"
                       cy="0"
-                      r={radius + 4}
+                      r={imperialOuterRadius}
                       fill="#f5e6b3"
                       stroke="#b8860b"
-                      strokeWidth="2"
+                      strokeWidth={isMobile ? 2.6 : 2}
                     />
                     <polygon
-                      points="-8,-22 0,-30 8,-22"
+                      points={
+                        isMobile
+                          ? '-9.5,-27 0,-36.5 9.5,-27'
+                          : '-8,-22 0,-30 8,-22'
+                      }
                       fill="#d4a017"
                       stroke="#785609"
-                      strokeWidth="1.2"
+                      strokeWidth={isMobile ? 1.5 : 1.2}
                     />
                   </>
                 )}
@@ -537,7 +599,7 @@ export function StrategyMap({
                   r={radius}
                   fill={faction.color}
                   stroke={isImperial ? '#f7dc88' : '#faf3e3'}
-                  strokeWidth={isImperial ? 2.4 : 2.2}
+                  strokeWidth={isMobile ? (isImperial ? 2.8 : 2.5) : isImperial ? 2.4 : 2.2}
                 />
 
                 {/* Subtle inner fortress ring */}
@@ -554,13 +616,17 @@ export function StrategyMap({
                 {/* Troop Count inside Node */}
                 <text
                   x="0"
-                  y="5"
+                  y={troopTextY}
                   textAnchor="middle"
                   fill="#ffffff"
-                  fontSize="14"
-                  fontWeight="700"
-                  className="tabular-nums"
-                  style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.38)', strokeWidth: '2px' }}
+                  fontSize={troopFontSize}
+                  fontWeight={isMobile ? '800' : '700'}
+                  className="tabular-nums font-bold"
+                  style={{
+                    paintOrder: 'stroke',
+                    stroke: 'rgba(0,0,0,0.42)',
+                    strokeWidth: isMobile ? '2.6px' : '2px',
+                  }}
                 >
                   {city.troops}
                 </text>
@@ -568,16 +634,16 @@ export function StrategyMap({
                 {/* City Name Label below node — high contrast parchment halo */}
                 <text
                   x="0"
-                  y={isImperial ? 37 : 34}
+                  y={nameTextY}
                   textAnchor="middle"
-                  fill="#1f1a14"
-                  fontSize="14"
-                  fontWeight="700"
+                  fill="#1a1510"
+                  fontSize={nameFontSize}
+                  fontWeight={isMobile ? '800' : '700'}
                   fontFamily="'Noto Serif KR', serif"
                   style={{
                     paintOrder: 'stroke',
                     stroke: '#f6edd9',
-                    strokeWidth: '4.8px',
+                    strokeWidth: isMobile ? '5.8px' : '4.8px',
                     strokeLinejoin: 'round',
                   }}
                 >
@@ -587,26 +653,26 @@ export function StrategyMap({
 
                 {/* Combat Forecast Badge or Action Target Tag above node */}
                 {targetMeta && (
-                  <g transform={`translate(0, ${isImperial ? -38 : -31})`}>
+                  <g transform={`translate(0, ${targetBadgeY})`}>
                     {targetMeta.kind === 'attack' && targetMeta.forecast && (
                       <>
                         <rect
-                          x="-20"
-                          y="-10"
-                          width="40"
-                          height="18"
-                          rx="3"
+                          x={-badgeW / 2}
+                          y={-badgeH / 2 - 1}
+                          width={badgeW}
+                          height={badgeH}
+                          rx="3.5"
                           fill={FORECAST_STYLES[targetMeta.forecast].bg}
                           stroke={FORECAST_STYLES[targetMeta.forecast].stroke}
-                          strokeWidth="1"
+                          strokeWidth="1.2"
                         />
                         <text
                           x="0"
-                          y="2.5"
+                          y={isMobile ? 3.5 : 2.5}
                           textAnchor="middle"
                           fill={FORECAST_STYLES[targetMeta.forecast].text}
-                          fontSize="10.5"
-                          fontWeight="700"
+                          fontSize={badgeFontSize}
+                          fontWeight="800"
                         >
                           {targetMeta.forecast}
                         </text>
@@ -615,22 +681,22 @@ export function StrategyMap({
                     {targetMeta.kind === 'transport' && (
                       <>
                         <rect
-                          x="-20"
-                          y="-10"
-                          width="40"
-                          height="18"
-                          rx="3"
+                          x={-badgeW / 2}
+                          y={-badgeH / 2 - 1}
+                          width={badgeW}
+                          height={badgeH}
+                          rx="3.5"
                           fill="#24633e"
                           stroke="#143d25"
-                          strokeWidth="1"
+                          strokeWidth="1.2"
                         />
                         <text
                           x="0"
-                          y="2.5"
+                          y={isMobile ? 3.5 : 2.5}
                           textAnchor="middle"
                           fill="#ffffff"
-                          fontSize="10.5"
-                          fontWeight="700"
+                          fontSize={badgeFontSize}
+                          fontWeight="800"
                         >
                           수송
                         </text>
@@ -639,22 +705,22 @@ export function StrategyMap({
                     {targetMeta.kind === 'fire' && (
                       <>
                         <rect
-                          x="-20"
-                          y="-10"
-                          width="40"
-                          height="18"
-                          rx="3"
+                          x={-badgeW / 2}
+                          y={-badgeH / 2 - 1}
+                          width={badgeW}
+                          height={badgeH}
+                          rx="3.5"
                           fill="#d9480f"
                           stroke="#7d2506"
-                          strokeWidth="1"
+                          strokeWidth="1.2"
                         />
                         <text
                           x="0"
-                          y="2.5"
+                          y={isMobile ? 3.5 : 2.5}
                           textAnchor="middle"
                           fill="#ffffff"
-                          fontSize="10.5"
-                          fontWeight="700"
+                          fontSize={badgeFontSize}
+                          fontWeight="800"
                         >
                           화공
                         </text>
